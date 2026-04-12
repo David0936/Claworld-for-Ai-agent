@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 
 interface Agent {
   id: string;
@@ -17,30 +16,36 @@ interface LayerInfo {
   canvas_size: number[];
 }
 
-// Canvas reference size
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
 
-// Layer z-order (back to front)
+// Layer order: back → front (bottom of array = top-most)
+// Order matches how layers should visually stack in the office
 const LAYER_FILES: [string, string][] = [
   ["room-bg", "room-bg.png"],
+  // === 背景层 ===
   ["墙左", "layer-墙左.png"],
   ["墙右", "layer-墙右.png"],
-  ["办公区", "layer-办公区.png"],
-  ["电脑椅子", "layer-电脑椅子.png"],
-  ["沙发地毯", "layer-沙发地毯.png"],
-  ["电视", "layer-电视.png"],
-  ["左边柜子", "layer-左边柜子.png"],
   ["机柜", "layer-机柜.png"],
-  ["卫生间", "layer-卫生间.png"],
+  ["显示状态的机器", "layer-显示状态的机器.png"],
+  // === 中景家具层 ===
+  ["左边柜子", "layer-左边柜子.png"],
   ["床", "layer-床.png"],
   ["跑步机", "layer-跑步机.png"],
+  ["沙发地毯", "layer-沙发地毯.png"],   // 沙发在地毯上
+  ["办公区", "layer-办公区.png"],
+  ["卫生间", "layer-卫生间.png"],
+  // === 前景细节层 ===
+  ["电视", "layer-电视.png"],
+  ["电脑椅子", "layer-电脑椅子.png"],
   ["微波炉", "layer-微波炉.png"],
   ["饮水机", "layer-饮水机-ps.png"],
   ["取暖器", "layer-取暖器-ps.png"],
   ["灯", "layer-灯.png"],
-  ["显示状态的机器", "layer-显示状态的机器.png"],
   ["吉他", "layer-吉他.png"],
+  // === 角色层（agent 角色在这里）===
+  // agent 坐在沙发上 → 左下区域
+  // === 标识层 ===
   ["小家标识", "layer-小家标识.png"],
   ["LOGO文字", "layer-LOGO文字.png"],
 ];
@@ -52,14 +57,11 @@ const STATUS_COLORS: Record<string, string> = {
   offline: "#555555",
 };
 
-const DESK_POSITIONS = [
-  { x: 180, y: 370 },
-  { x: 360, y: 370 },
-  { x: 540, y: 370 },
-  { x: 720, y: 370 },
-  { x: 900, y: 370 },
-  { x: 1080, y: 370 },
-];
+// 角色坐在沙发上的位置（相对于 canvas 1280x720）
+const AGENT_POSITION = {
+  left: "30%",  // 沙发在左下
+  top: "62%",   // 下半部分
+};
 
 interface Props {
   agents?: Agent[];
@@ -71,8 +73,6 @@ interface Props {
 
 export default function PixelOffice({
   agents = [],
-  width = 1280,
-  height = 720,
   onAgentClick,
 }: Props) {
   const [coords, setCoords] = useState<Record<string, LayerInfo>>({});
@@ -86,15 +86,14 @@ export default function PixelOffice({
         setLoaded(true);
       })
       .catch(() => {
-        // If coords fail, just show background
         setLoaded(true);
       });
   }, []);
 
+  // 计算图层绝对位置
   function getLayerStyle(key: string) {
     const info = coords[key];
     if (!info) {
-      // Fallback: full canvas size centered
       return {
         position: "absolute" as const,
         left: 0,
@@ -105,7 +104,6 @@ export default function PixelOffice({
     }
     const [cx, cy] = info.canvas_center;
     const [iw, ih] = info.canvas_size;
-    // Convert canvas coords to percentage
     const leftPct = ((cx - iw / 2) / CANVAS_W) * 100;
     const topPct = ((cy - ih / 2) / CANVAS_H) * 100;
     const wPct = (iw / CANVAS_W) * 100;
@@ -120,6 +118,9 @@ export default function PixelOffice({
   }
 
   const aspectRatio = CANVAS_H / CANVAS_W;
+  // 只取第一个 agent 显示
+  const mainAgent = agents[0];
+  const statusColor = STATUS_COLORS[mainAgent?.status || "offline"];
 
   return (
     <div
@@ -148,30 +149,7 @@ export default function PixelOffice({
         </div>
       )}
 
-      {/* Render each layer as img */}
-      {loaded &&
-        LAYER_FILES.map(([key, filename]) => {
-          // Skip room-bg — it's the background div
-          if (key === "room-bg") return null;
-          return (
-            <img
-              key={key}
-              src={`/office-assets/assets/${filename}`}
-              alt={key}
-              loading="lazy"
-              style={{
-                ...getLayerStyle(key),
-                objectFit: "fill",
-                pointerEvents: "none",
-              }}
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
-            />
-          );
-        })}
-
-      {/* Background (room-bg.png) — fills entire container */}
+      {/* 背景层 */}
       {loaded && (
         <img
           src="/office-assets/assets/room-bg.png"
@@ -190,92 +168,128 @@ export default function PixelOffice({
         />
       )}
 
-      {/* Agent characters */}
+      {/* 静态层叠（从底到顶） */}
       {loaded &&
-        agents.map((agent, i) => {
-          const desk = DESK_POSITIONS[i] || DESK_POSITIONS[0];
-          const leftPct = (desk.x / CANVAS_W) * 100;
-          const topPct = (desk.y / CANVAS_H) * 100;
-          const statusColor = STATUS_COLORS[agent.status || "offline"];
+        LAYER_FILES.filter(([key]) => key !== "room-bg").map(([key, filename]) => (
+          <img
+            key={key}
+            src={`/office-assets/assets/${filename}`}
+            alt={key}
+            loading="lazy"
+            style={{
+              ...getLayerStyle(key),
+              objectFit: "fill",
+              pointerEvents: "none",
+            }}
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
+          />
+        ))}
 
-          return (
-            <div
-              key={agent.id}
-              style={{
-                position: "absolute",
-                left: `${leftPct}%`,
-                top: `${topPct}%`,
-                transform: "translate(-50%, -100%)",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                cursor: "pointer",
-                opacity: agent.status === "offline" ? 0.4 : 1,
-              }}
-              onClick={() => onAgentClick?.(agent)}
-            >
-              {/* Agent sprite */}
-              <img
-                src="/office-assets/assets/char-lobster.png"
-                alt={agent.name}
-                style={{
-                  width: "64px",
-                  height: "auto",
-                  imageRendering: "pixelated",
-                  filter: agent.status === "busy" ? "brightness(1.2)" : "none",
-                }}
-              />
-              {/* Name tag */}
-              <div
-                style={{
-                  marginTop: "2px",
-                  padding: "2px 6px",
-                  background: "rgba(0,0,0,0.75)",
-                  border: `1.5px solid ${agent.color}`,
-                  borderRadius: "4px",
-                  fontSize: "10px",
-                  fontFamily: "monospace",
-                  color: "#fff",
-                  whiteSpace: "nowrap",
-                  maxWidth: "80px",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  textAlign: "center",
-                }}
-              >
-                {agent.name}
-              </div>
-              {/* Status dot */}
-              <div
-                style={{
-                  width: "8px",
-                  height: "8px",
-                  borderRadius: "50%",
-                  background: statusColor,
-                  border: "1.5px solid #000",
-                  marginTop: "2px",
-                }}
-              />
-            </div>
-          );
-        })}
-
-      {/* Agent count badge */}
-      {loaded && agents.length > 0 && (
+      {/* 角色层（agent 坐在沙发上） */}
+      {loaded && mainAgent && (
         <div
           style={{
             position: "absolute",
-            bottom: "8px",
-            right: "8px",
-            padding: "4px 8px",
-            background: "rgba(0,0,0,0.7)",
-            borderRadius: "6px",
+            left: AGENT_POSITION.left,
+            top: AGENT_POSITION.top,
+            transform: "translate(-50%, -100%)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            cursor: mainAgent ? "pointer" : "default",
+            opacity: mainAgent.status === "offline" ? 0.35 : 1,
+            transition: "opacity 0.3s",
+            zIndex: 20,
+          }}
+          onClick={() => onAgentClick?.(mainAgent)}
+        >
+          {/* 龙虾角色精灵 */}
+          <img
+            src="/office-assets/assets/char-lobster.png"
+            alt={mainAgent.name}
+            style={{
+              width: "72px",
+              height: "auto",
+              imageRendering: "pixelated",
+              filter: mainAgent.status === "busy" ? "brightness(1.1) drop-shadow(0 0 6px #ff6b6b)" : "none",
+            }}
+          />
+
+          {/* 名字标签 */}
+          <div
+            style={{
+              marginTop: "3px",
+              padding: "2px 8px",
+              background: "rgba(0,0,0,0.8)",
+              border: `1.5px solid ${mainAgent.color}`,
+              borderRadius: "4px",
+              fontSize: "11px",
+              fontFamily: "monospace",
+              color: "#fff",
+              whiteSpace: "nowrap",
+              textAlign: "center",
+            }}
+          >
+            {mainAgent.name}
+          </div>
+
+          {/* 状态指示器 */}
+          <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "3px" }}>
+            <div
+              style={{
+                width: "9px",
+                height: "9px",
+                borderRadius: "50%",
+                background: statusColor,
+                border: "1.5px solid #000",
+                boxShadow: mainAgent.status === "online" ? `0 0 6px ${statusColor}` : "none",
+              }}
+            />
+            <span
+              style={{
+                fontSize: "9px",
+                color: statusColor,
+                fontFamily: "monospace",
+                textTransform: "uppercase",
+              }}
+            >
+              {mainAgent.status || "offline"}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* 右下角状态信息 */}
+      {loaded && mainAgent && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "10px",
+            right: "10px",
+            padding: "5px 10px",
+            background: "rgba(0,0,0,0.75)",
+            borderRadius: "8px",
+            border: "1px solid rgba(255,255,255,0.08)",
             fontSize: "10px",
             color: "var(--text-muted)",
             fontFamily: "monospace",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
           }}
         >
-          {agents.filter((a) => a.status !== "offline").length}/{agents.length} online
+          <span
+            style={{
+              width: "7px",
+              height: "7px",
+              borderRadius: "50%",
+              background: statusColor,
+              display: "inline-block",
+            }}
+          />
+          {mainAgent.name}
         </div>
       )}
     </div>
