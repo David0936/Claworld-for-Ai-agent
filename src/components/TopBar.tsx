@@ -1,8 +1,29 @@
 "use client";
 
 import { Bell, Search } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+const pageTitles: Record<string, string> = {
+  "/": "Dashboard",
+  "/activities": "Activity Log",
+  "/search": "Search",
+  "/cron": "Cron Jobs",
+  "/skills": "Skills",
+  "/files": "Files",
+  "/costs": "Cost Analysis",
+  "/git": "Git Status",
+  "/memory": "Memory",
+  "/sessions": "Sessions",
+  "/calendar": "Calendar",
+  "/terminal": "Terminal",
+  "/settings": "Settings",
+};
 
 export function TopBar() {
+  const pathname = usePathname();
+  const title = pageTitles[pathname] || "Claworld";
+
   return (
     <header
       style={{
@@ -20,12 +41,23 @@ export function TopBar() {
         zIndex: 30,
       }}
     >
-      {/* Page title area — can be customized per page */}
-      <div />
+      {/* Page title */}
+      <div
+        style={{
+          fontFamily: "var(--font-heading)",
+          fontSize: "16px",
+          fontWeight: 700,
+          color: "var(--text-primary)",
+          letterSpacing: "-0.3px",
+        }}
+      >
+        {title}
+      </div>
 
       {/* Actions */}
       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-        <button
+        <Link
+          href="/search"
           style={{
             padding: "8px",
             borderRadius: "var(--radius-md)",
@@ -36,10 +68,12 @@ export function TopBar() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            textDecoration: "none",
+            transition: "all 0.15s",
           }}
         >
           <Search size={16} />
-        </button>
+        </Link>
         <button
           style={{
             padding: "8px",
@@ -55,17 +89,6 @@ export function TopBar() {
           }}
         >
           <Bell size={16} />
-          <span
-            style={{
-              position: "absolute",
-              top: "6px",
-              right: "6px",
-              width: "6px",
-              height: "6px",
-              borderRadius: "50%",
-              backgroundColor: "var(--accent)",
-            }}
-          />
         </button>
       </div>
     </header>
