@@ -1,0 +1,3 @@
+[submodule "public/office-assets/assets"]
+	path = public/office-assets/assets
+	url = https://github.com/David0936/claworld-lobster-king.git
