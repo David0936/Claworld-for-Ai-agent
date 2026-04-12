@@ -5,6 +5,7 @@ import { GitBranch, GitCommit, GitPullRequest, AlertCircle, CheckCircle2, Refres
 
 interface GitData {
   isRepo: boolean;
+  workspace?: string;
   branch?: string;
   remote?: string;
   status?: string;
@@ -115,13 +116,13 @@ export default function GitPage() {
       </div>
 
       {/* Sync status */}
-      {(data.ahead > 0 || data.behind > 0) && (
+      {((data.ahead ?? 0) > 0 || (data.behind ?? 0) > 0) && (
         <div className="card" style={{ marginBottom: "20px", display: "flex", gap: "16px", padding: "16px" }}>
-          {data.ahead > 0 && (
-            <span style={{ fontSize: "12px", color: "var(--info)" }}>↑ {data.ahead} commit{data.ahead > 1 ? "s" : ""} ahead</span>
+          {(data.ahead ?? 0) > 0 && (
+            <span style={{ fontSize: "12px", color: "var(--info)" }}>↑ {data.ahead} commit{(data.ahead ?? 0) > 1 ? "s" : ""} ahead</span>
           )}
-          {data.behind > 0 && (
-            <span style={{ fontSize: "12px", color: "var(--warning)" }}>↓ {data.behind} commit{data.behind > 1 ? "s" : ""} behind</span>
+          {(data.behind ?? 0) > 0 && (
+            <span style={{ fontSize: "12px", color: "var(--warning)" }}>↓ {data.behind} commit{(data.behind ?? 0) > 1 ? "s" : ""} behind</span>
           )}
         </div>
       )}

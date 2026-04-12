@@ -1,22 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Activity, Timer, Puzzle, Zap, Brain, GitBranch, RefreshCw, MessageSquare } from "lucide-react";
+import { Activity, Timer, Puzzle, Zap, Brain, MessageSquare, RefreshCw } from "lucide-react";
 import { StatsCard } from "@/components/StatsCard";
 import { SystemInfo } from "@/components/SystemInfo";
 import { ActivityFeed } from "@/components/ActivityFeed";
 import { getAgentDisplayName } from "@/config/branding";
+import { useI18n } from "@/i18n/context";
 
-function getGreeting(): { text: string; emoji: string } {
+function getGreetingKey(): string {
   const h = new Date().getHours();
-  if (h < 6) return { text: "夜深了，注意休息", emoji: "🌙" };
-  if (h < 9) return { text: "早上好！新的一天开始了", emoji: "🌅" };
-  if (h < 12) return { text: "上午好！保持专注", emoji: "☀️" };
-  if (h < 14) return { text: "中午好！别忘了吃午饭", emoji: "🍱" };
-  if (h < 18) return { text: "下午好！继续加油", emoji: "💪" };
-  if (h < 21) return { text: "傍晚好！今天做得很好", emoji: "🌇" };
-  return { text: "晚上好！休息一下吧", emoji: "🌃" };
+  if (h < 6) return "night";
+  if (h < 9) return "morning";
+  if (h < 12) return "lateMorning";
+  if (h < 14) return "noon";
+  if (h < 18) return "afternoon";
+  if (h < 21) return "evening";
+  return "lateNight";
 }
+
+const EMOJIS: Record<string, string> = {
+  night: "🌙", morning: "🌅", lateMorning: "☀️", noon: "🍱",
+  afternoon: "💪", evening: "🌇", lateNight: "🌃",
+};
 
 interface DashboardData {
   cronJobs: { total: number; enabled: number };
@@ -33,6 +39,7 @@ interface RecentActivity {
 }
 
 export default function DashboardPage() {
+  const { t, lang } = useI18n();
   const [data, setData] = useState<DashboardData | null>(null);
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +55,12 @@ export default function DashboardPage() {
     });
   }, []);
 
-  const greeting = getGreeting();
+  const greetingKey = getGreetingKey();
+  const greetingText = t(`dashboard.greeting.${greetingKey}` as Parameters<typeof t>[0]);
+
+  const dateFormat: Record<string, string> = {
+    "zh-CN": "en-US", "zh-TW": "en-US", "en": "en-US", "ja": "ja-JP",
+  };
 
   return (
     <div>
@@ -72,7 +84,7 @@ export default function DashboardPage() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <span style={{ fontSize: "32px" }}>{greeting.emoji}</span>
+            <span style={{ fontSize: "32px" }}>{EMOJIS[greetingKey]}</span>
             <div>
               <h1
                 style={{
@@ -83,11 +95,11 @@ export default function DashboardPage() {
                   color: "var(--text-primary)",
                 }}
               >
-                {greeting.text}
+                {greetingText}
               </h1>
               <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>
                 {getAgentDisplayName()} ·{" "}
-                {new Date().toLocaleDateString("en-US", {
+                {new Date().toLocaleDateString(dateFormat[lang] || "en-US", {
                   weekday: "long",
                   month: "long",
                   day: "numeric",
@@ -118,11 +130,7 @@ export default function DashboardPage() {
               }}
             />
             <span
-              style={{
-                fontSize: "12px",
-                fontWeight: 600,
-                color: "var(--positive)",
-              }}
+              style={{ fontSize: "12px", fontWeight: 600, color: "var(--positive)" }}
             >
               System Online
             </span>
@@ -140,105 +148,80 @@ export default function DashboardPage() {
         }}
       >
         <StatsCard
-          title="今日活动"
+          title={t("dashboard.stats.todayActivities")}
           value={loading ? "—" : (data?.todayActivities ?? 0)}
           icon={<Activity size={18} />}
           iconColor="var(--info)"
-          subtitle="最近24小时"
+          subtitle={t("dashboard.stats.recent7Days")}
         />
         <StatsCard
-          title="定时任务"
-          value={
-            loading
-              ? "—"
-              : data
-              ? `${data.cronJobs.enabled}/${data.cronJobs.total}`
-              : "—"
-          }
+          title={t("dashboard.stats.cronJobs")}
+          value={loading ? "—" : data ? `${data.cronJobs.enabled}/${data.cronJobs.total}` : "—"}
           icon={<Timer size={18} />}
           iconColor="var(--warning)"
-          subtitle="已启用 / 总数"
+          subtitle={t("dashboard.stats.cronJobsSub")}
         />
         <StatsCard
-          title="已安装技能"
+          title={t("dashboard.stats.skills")}
           value={loading ? "—" : (data?.skills ?? 0)}
           icon={<Puzzle size={18} />}
           iconColor="var(--accent)"
-          subtitle="可用技能"
+          subtitle={t("dashboard.stats.skillsSub")}
         />
         <StatsCard
-          title="系统运行"
-          value={
-            data?.uptimeMs
-              ? formatUptimeShort(data.uptimeMs)
-              : loading
-              ? "—"
-              : "—"
-          }
+          title={t("dashboard.stats.uptime")}
+          value={data?.uptimeMs ? formatUptimeShort(data.uptimeMs) : loading ? "—" : "—"}
           icon={<Zap size={18} />}
           iconColor="var(--positive)"
-          subtitle="持续运行时间"
+          subtitle={t("dashboard.stats.uptimeSub")}
         />
       </div>
 
       {/* Quick Actions */}
       <div style={{ marginBottom: "16px" }}>
         <h3 style={{ fontSize: "12px", fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "10px" }}>
-          Quick Actions
+          {t("dashboard.quickActions")}
         </h3>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <a href="/activities/migrate" onClick={async (e) => { e.preventDefault(); try { const r = await fetch("/api/activities/migrate", {method:"POST"}); const d = await r.json(); alert(`Imported ${d.imported} activities`); window.location.reload(); } catch { alert("Migration failed"); }}} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-secondary)", fontSize: "12px", fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
-            <RefreshCw size={13} /> Import Sessions
+          <a href="/activities/migrate" onClick={async (e) => {
+            e.preventDefault();
+            try {
+              const r = await fetch("/api/activities/migrate", { method: "POST" });
+              const d = await r.json();
+              alert(`Imported ${d.imported} activities`);
+              window.location.reload();
+            } catch { alert("Migration failed"); }
+          }} style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-secondary)", fontSize: "12px", fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
+            <RefreshCw size={13} /> {t("dashboard.quickActions.import")}
           </a>
           <a href="/memory" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-secondary)", fontSize: "12px", fontWeight: 600, textDecoration: "none" }}>
-            <Brain size={13} /> View Memory
+            <Brain size={13} /> {t("dashboard.quickActions.memory")}
           </a>
           <a href="/sessions" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-secondary)", fontSize: "12px", fontWeight: 600, textDecoration: "none" }}>
-            <MessageSquare size={13} /> All Sessions
+            <MessageSquare size={13} /> {t("dashboard.quickActions.sessions")}
           </a>
           <a href="/search" style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", borderRadius: "var(--radius-md)", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-secondary)", fontSize: "12px", fontWeight: 600, textDecoration: "none" }}>
-            Search
+            {t("dashboard.quickActions.search")}
           </a>
         </div>
       </div>
 
       {/* Bottom row */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr",
-          gap: "16px",
-        }}
-      >
+      <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "16px" }}>
         <SystemInfo uptimeMs={data?.uptimeMs} />
 
         <div className="card">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              marginBottom: "16px",
-            }}
-          >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
             <Activity size={16} style={{ color: "var(--info)" }} />
-            <h3
-              style={{
-                fontFamily: "var(--font-heading)",
-                fontSize: "14px",
-                fontWeight: 600,
-                color: "var(--text-primary)",
-              }}
-            >
-              最近活动
+            <h3 style={{ fontFamily: "var(--font-heading)", fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
+              {t("dashboard.recentActivity")}
             </h3>
           </div>
-
           {recentActivities.length > 0 ? (
             <ActivityFeed activities={recentActivities} compact />
           ) : (
             <p style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-              {loading ? "加载中..." : "暂无活动记录"}
+              {loading ? t("common.loading") : t("dashboard.noActivity")}
             </p>
           )}
         </div>

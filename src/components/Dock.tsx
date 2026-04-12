@@ -22,66 +22,51 @@ import {
   X,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useI18n } from "@/i18n/context";
 
-const navItems = [
-  { href: "/", label: "首页", icon: LayoutDashboard },
-  { href: "/activities", label: "活动", icon: Activity },
-  { href: "/search", label: "搜索", icon: Search },
-  { href: "/cron", label: "定时", icon: Timer },
-  { href: "/skills", label: "Skills", icon: Puzzle },
-  { href: "/files", label: "文件", icon: FolderOpen },
-  { href: "/git", label: "Git", icon: GitBranch },
-  { href: "/memory", label: "记忆", icon: Brain },
-  { href: "/costs", label: "成本", icon: DollarSign },
-  { href: "/calendar", label: "日历", icon: CalendarDays },
-  { href: "/terminal", label: "终端", icon: Terminal },
-  { href: "/sessions", label: "会话", icon: MessageSquare },
+const NAV_ITEMS = [
+  { href: "/", labelKey: "首页", labelKeyEn: "Dashboard", icon: LayoutDashboard },
+  { href: "/activities", labelKey: "活动", labelKeyEn: "Activities", icon: Activity },
+  { href: "/search", labelKey: "搜索", labelKeyEn: "Search", icon: Search },
+  { href: "/cron", labelKey: "定时", labelKeyEn: "Cron", icon: Timer },
+  { href: "/skills", labelKey: "Skills", labelKeyEn: "Skills", icon: Puzzle },
+  { href: "/files", labelKey: "文件", labelKeyEn: "Files", icon: FolderOpen },
+  { href: "/git", labelKey: "Git", labelKeyEn: "Git", icon: GitBranch },
+  { href: "/memory", labelKey: "记忆", labelKeyEn: "Memory", icon: Brain },
+  { href: "/costs", labelKey: "成本", labelKeyEn: "Costs", icon: DollarSign },
+  { href: "/calendar", labelKey: "日历", labelKeyEn: "Calendar", icon: CalendarDays },
+  { href: "/terminal", labelKey: "终端", labelKeyEn: "Terminal", icon: Terminal },
+  { href: "/sessions", labelKey: "会话", labelKeyEn: "Sessions", icon: MessageSquare },
+  { href: "/settings", labelKey: "设置", labelKeyEn: "Settings", icon: Settings },
 ];
 
 export function Dock() {
   const pathname = usePathname();
+  const { lang, availableLangs } = useI18n();
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
 
-  // Close on route change
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+  const isZh = lang === "zh-CN" || lang === "zh-TW";
 
-  // Prevent scroll on mobile when open
   useEffect(() => {
     if (isMobile) {
       document.body.style.overflow = open ? "hidden" : "";
     }
-    return () => {
-      document.body.style.overflow = "";
-    };
+    return () => { document.body.style.overflow = ""; };
   }, [open, isMobile]);
 
   return (
     <>
       {/* Mobile toggle */}
       {isMobile && (
-        <button
-          onClick={() => setOpen(!open)}
-          className="dock-mobile-toggle"
-          aria-label="Toggle menu"
-        >
+        <button onClick={() => setOpen(!open)} className="dock-mobile-toggle" aria-label="Toggle menu">
           {open ? <X size={20} /> : <Menu size={20} />}
         </button>
       )}
 
       {/* Overlay */}
       {isMobile && open && (
-        <div
-          onClick={() => setOpen(false)}
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.6)",
-            zIndex: 40,
-          }}
-        />
+        <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.6)", zIndex: 40 }} />
       )}
 
       {/* Dock */}
@@ -89,8 +74,10 @@ export function Dock() {
         className="dock"
         style={{
           position: "fixed",
-          left: 0,
-          top: 0,
+          left: isMobile ? 0 : undefined,
+          right: isMobile ? 0 : undefined,
+          top: isMobile ? undefined : 0,
+          bottom: isMobile ? 0 : undefined,
           height: "100vh",
           width: isMobile ? undefined : "200px",
           display: "flex",
@@ -100,65 +87,31 @@ export function Dock() {
           borderRight: isMobile ? "none" : "1px solid var(--border)",
           borderBottom: isMobile ? "1px solid var(--border)" : "none",
           zIndex: 50,
-          gap: isMobile ? "4px" : "4px",
-          overflow: isMobile ? "auto" : undefined,
-          ...(isMobile
-            ? {
-                bottom: 0,
-                left: 0,
-                right: 0,
-                top: "auto",
-                width: "100%",
-                height: "auto",
-                flexDirection: "row",
-                justifyContent: "center",
-              }
-            : {}),
+          gap: "4px",
+          overflow: isMobile ? "auto" : "hidden",
+          justifyContent: isMobile ? "center" : undefined,
         }}
       >
         {/* Logo */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            padding: isMobile ? "6px 8px" : "8px 10px",
-            marginBottom: isMobile ? "0" : "8px",
-          }}
-        >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: isMobile ? "6px 8px" : "8px 10px", marginBottom: isMobile ? "0" : "8px" }}>
           <img
             src="/branding/logo-light.png"
             alt="Claworld"
             style={{ height: "28px", width: "auto", objectFit: "contain" }}
             onError={(e) => {
               (e.target as HTMLImageElement).style.display = "none";
-              // Fallback: show emoji
-              const parent = (e.target as HTMLImageElement).parentElement;
-              if (parent) {
-                const emoji = document.createElement("span");
-                emoji.textContent = "🐟";
-                emoji.style.fontSize = "20px";
-                parent.prepend(emoji);
-              }
             }}
           />
         </div>
 
         {!isMobile && (
-          <div
-            style={{
-              height: "1px",
-              backgroundColor: "var(--border)",
-              marginBottom: "8px",
-            }}
-          />
+          <div style={{ height: "1px", backgroundColor: "var(--border)", marginBottom: "8px" }} />
         )}
 
-        {navItems.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/" && pathname.startsWith(item.href));
+        {NAV_ITEMS.map((item) => {
+          const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
           const Icon = item.icon;
+          const label = isZh ? item.labelKey : item.labelKeyEn;
 
           return (
             <Link
@@ -181,55 +134,15 @@ export function Dock() {
                 justifyContent: isMobile ? "center" : "flex-start",
                 minWidth: isMobile ? "52px" : undefined,
               }}
+              onClick={() => isMobile && setOpen(false)}
             >
-              <Icon size={18} />
-              {!isMobile && <span>{item.label}</span>}
+              <Icon size={16} style={{ flexShrink: 0 }} />
+              {!isMobile && <span>{label}</span>}
+              {!isMobile && isActive && <ChevronRight size={12} style={{ marginLeft: "auto", opacity: 0.5 }} />}
             </Link>
           );
         })}
-
-        {!isMobile && (
-          <div
-            style={{
-              marginTop: "auto",
-              paddingTop: "12px",
-              borderTop: "1px solid var(--border)",
-            }}
-          >
-            <div
-              style={{
-                padding: "8px 12px",
-                fontSize: "10px",
-                color: "var(--text-muted)",
-              }}
-            >
-              Claworld v0.1.0
-            </div>
-          </div>
-        )}
       </nav>
-
-      <style>{`
-        .dock-item:hover:not(.active) {
-          background-color: var(--surface-elevated) !important;
-          color: var(--text-primary) !important;
-        }
-        .dock-mobile-toggle {
-          position: fixed;
-          top: 12px;
-          left: 12px;
-          z-index: 60;
-          padding: 8px;
-          background-color: var(--surface);
-          border: 1px solid var(--border);
-          border-radius: var(--radius-md);
-          color: var(--text-primary);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-      `}</style>
     </>
   );
 }
