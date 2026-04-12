@@ -21,6 +21,8 @@ import {
   Terminal,
   Bot,
   LayoutGrid,
+  ShoppingBag,
+  Users,
   X,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -29,6 +31,8 @@ import { useI18n } from "@/i18n/context";
 const NAV_ITEMS = [
   { href: "/", labelKey: "首页", labelKeyEn: "Dashboard", icon: LayoutDashboard },
   { href: "/office", labelKey: "办公室", labelKeyEn: "Office", icon: LayoutGrid },
+  { href: "/shop", labelKey: "商城", labelKeyEn: "Shop", icon: ShoppingBag },
+  { href: "/tenants", labelKey: "房客", labelKeyEn: "Tenants", icon: Users },
   { href: "/agents", labelKey: "团队", labelKeyEn: "Agents", icon: Bot },
   { href: "/search", labelKey: "搜索", labelKeyEn: "Search", icon: Search },
   { href: "/cron", labelKey: "定时", labelKeyEn: "Cron", icon: Timer },

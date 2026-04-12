@@ -16,3 +16,15 @@ build/
 # OS
 .DS_Store
 *.log
+
+# Office assets
+office-assets/.claude/
+office-assets/branding/
+office-assets/*.psd
+office-assets/*.html
+office-assets/*.py
+office-assets/*.jsx
+office-assets/phaser.min.js
+# Embedded repos
+reference/
+

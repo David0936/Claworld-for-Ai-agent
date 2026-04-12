@@ -2,345 +2,346 @@
 
 import { useEffect, useRef, useState } from "react";
 
-export interface OfficeAgent {
+interface Agent {
   id: string;
   name: string;
-  status: "online" | "busy" | "idle" | "offline";
+  status?: string;
   emoji?: string;
-  avatar?: string; // base64 image
-  color?: string;
+  color: string;
 }
 
-interface PixelOfficeProps {
-  agents: OfficeAgent[];
-  width?: number;
-  height?: number;
+interface LayerInfo {
+  psd_bbox: number[];
+  canvas_center: number[];
+  canvas_size: number[];
 }
 
-// Pixel art palette (retro computer room vibe)
-const PALETTE = {
-  floor: "#1a1a2e",
-  floorTile: "#16213e",
-  wall: "#0f3460",
-  wallAccent: "#1a4a6e",
-  desk: "#533483",
-  deskTop: "#694489",
-  chair: "#7b68ee",
-  monitor: "#00d4aa",
-  monitorGlow: "#00ffcc",
-  screen: "#001a1a",
-  plant: "#00a878",
-  plantDark: "#007a5e",
-  pot: "#8b4513",
-  window: "#1e3a5f",
-  windowGlow: "#4a9eff",
-  shelf: "#6b5b95",
-  book: "#e94560",
-  book2: "#f7dc6f",
-  book3: "#58d68d",
-  carpet: "#2c1654",
-  lamp: "#f4d03f",
-  lampOff: "#7d6608",
-  cable: "#555",
-  coffee: "#8b4513",
-  mug: "#cd853f",
+// Layer definition: maps layer name to its PNG file and z-order
+const LAYER_ORDER = [
+  "room-bg",        // 0 — floor / background
+  "墙左",           // 1
+  "墙右",           // 2
+  "办公区",         // 3
+  "电脑椅子",       // 4
+  "沙发地毯",       // 5
+  "电视",           // 6
+  "左边柜子",       // 7
+  "机柜",           // 8
+  "卫生间",         // 9
+  "床",             // 10
+  "跑步机",         // 11
+  "微波炉",         // 12
+  "饮水机",         // 13
+  "取暖器",         // 14
+  "灯",             // 15
+  "显示状态的机器", // 16
+  "吉他",           // 17
+  "小家标识",       // 18 — sign / logo
+  "LOGO文字",       // 19 — top-most decoration
+  // Dynamic (drawn programmatically):
+  // "龙虾角色"      // agent character overlay
+];
+
+// Desk positions for agents (x, y in canvas coordinates)
+const DESK_POSITIONS = [
+  { x: 180, y: 340, label: "Desk 1" },
+  { x: 360, y: 340, label: "Desk 2" },
+  { x: 540, y: 340, label: "Desk 3" },
+  { x: 720, y: 340, label: "Desk 4" },
+  { x: 900, y: 340, label: "Desk 5" },
+  { x: 1080, y: 340, label: "Desk 6" },
+];
+
+const STATUS_COLORS: Record<string, string> = {
+  online: "#00ff88",
+  busy: "#ff6b6b",
+  idle: "#ffd93d",
+  offline: "#555555",
 };
 
-// Draw pixel rect helper
-function px(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
-  ctx.fillStyle = color;
-  ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+function getStatusColor(status?: string) {
+  return STATUS_COLORS[status || "offline"] || STATUS_COLORS.offline;
 }
 
-// Draw text pixel-style
-function pxText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, color: string, scale = 1) {
-  ctx.fillStyle = color;
-  ctx.font = `${8 * scale}px monospace`;
-  ctx.fillText(text, Math.round(x), Math.round(y));
-}
-
-// Draw a simple pixel character
-function drawPixelCharacter(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  scale: number,
-  status: OfficeAgent["status"],
-  color: string,
-  emoji?: string,
-  avatarBase64?: string
-) {
-  const s = scale;
-  const bodyColor = status === "offline" ? "#555" : color;
-  const headY = y;
-
-  // Head (pixel face)
-  px(ctx, x + s, headY, s * 6, s * 6, bodyColor);
-  px(ctx, x + s * 2, headY - s, s * 4, s * 2, bodyColor); // top of head
-
-  // Eyes
-  if (status !== "offline") {
-    px(ctx, x + s * 2, headY + s * 2, s, s, "#fff");
-    px(ctx, x + s * 5, headY + s * 2, s, s, "#fff");
-    px(ctx, x + s * 2, headY + s * 3, s, s, "#000"); // left pupil
-    px(ctx, x + s * 5, headY + s * 3, s, s, "#000"); // right pupil
-  } else {
-    px(ctx, x + s * 2, headY + s * 3, s, s * 2, "#888");
-    px(ctx, x + s * 5, headY + s * 3, s, s * 2, "#888");
-  }
-
-  // Body
-  px(ctx, x + s, headY + s * 6, s * 6, s * 6, bodyColor);
-
-  // Arms
-  px(ctx, x, headY + s * 7, s, s * 3, bodyColor);
-  px(ctx, x + s * 7, headY + s * 7, s, s * 3, bodyColor);
-
-  // Status indicator
-  const statusColors: Record<string, string> = {
-    online: "#00ff88",
-    busy: "#ff6b6b",
-    idle: "#ffd93d",
-    offline: "#555555",
-  };
-  px(ctx, x + s * 3, headY - s * 2, s * 2, s * 2, statusColors[status] || "#555");
-
-  // Typing animation for busy
-  if (status === "busy") {
-    px(ctx, x - s, headY + s * 9, s * 2, s, statusColors.busy);
-  }
-
-  // Draw avatar image as pixelated overlay if available
-  if (avatarBase64 && status !== "offline") {
-    const img = new Image();
-    img.src = avatarBase64;
-    // Clip to head area
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, headY - s, s * 8, s * 8);
-    ctx.clip();
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(img, x, headY - s, s * 8, s * 8);
-    ctx.restore();
+// Load layer coordinates manifest
+async function loadLayerCoords(): Promise<Record<string, LayerInfo>> {
+  try {
+    const res = await fetch("/office-assets/assets/layer-coords.json");
+    return await res.json();
+  } catch {
+    return {};
   }
 }
 
-// Draw office desk with computer
-function drawDesk(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number) {
-  const s = scale;
-  // Desk surface
-  px(ctx, x, y, s * 12, s * 2, PALETTE.deskTop);
-  // Desk legs
-  px(ctx, x, y + s * 2, s, s * 6, PALETTE.desk);
-  px(ctx, x + s * 11, y + s * 2, s, s * 6, PALETTE.desk);
-  // Monitor
-  px(ctx, x + s * 3, y - s * 10, s * 6, s * 7, PALETTE.monitor);
-  px(ctx, x + s * 4, y - s * 9, s * 4, s * 4, PALETTE.screen);
-  // Monitor glow
-  px(ctx, x + s * 4, y - s * 9, s * 4, s * 1, PALETTE.monitorGlow);
-  // Monitor stand
-  px(ctx, x + s * 5, y - s * 3, s * 2, s * 3, "#444");
-  // Keyboard
-  px(ctx, x + s * 3, y - s * 1, s * 5, s, "#333");
-  // Coffee mug
-  px(ctx, x + s * 10, y - s * 3, s * 2, s * 3, PALETTE.mug);
-  px(ctx, x + s * 11, y - s * 2, s, s, "#8b4513");
+interface Props {
+  agents?: Agent[];
+  width?: number;
+  height?: number;
+  onAgentClick?: (agent: Agent) => void;
+  selectedAgentId?: string;
 }
 
-// Draw plant
-function drawPlant(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number) {
-  const s = scale;
-  px(ctx, x + s, y, s * 2, s * 4, PALETTE.pot);
-  px(ctx, x, y - s * 3, s * 4, s * 4, PALETTE.plant);
-  px(ctx, x + s, y - s * 5, s * 2, s * 3, PALETTE.plantDark);
-  px(ctx, x - s, y - s * 2, s * 2, s * 2, PALETTE.plant);
-  px(ctx, x + s * 3, y - s * 2, s * 2, s * 2, PALETTE.plantDark);
-}
-
-// Draw bookshelf
-function drawShelf(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number, height: number) {
-  const s = scale;
-  px(ctx, x, y, s * 2, height * s, PALETTE.shelf);
-  for (let row = 0; row < Math.floor(height / 4); row++) {
-    const bookColors = [PALETTE.book, PALETTE.book2, PALETTE.book3, "#e74c3c", "#3498db"];
-    for (let col = 0; col < 2; col++) {
-      px(ctx, x + col * s + s * 0.2, y + row * s * 4 + s, s * 0.8, s * 3, bookColors[(row + col) % bookColors.length]);
-    }
-  }
-}
-
-// Draw window
-function drawWindow(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number, w: number, h: number) {
-  const s = scale;
-  px(ctx, x, y, w * s, h * s, PALETTE.window);
-  // Window frame
-  px(ctx, x, y, w * s, s, PALETTE.wall);
-  px(ctx, x, y + h * s - s, w * s, s, PALETTE.wall);
-  px(ctx, x, y, s, h * s, PALETTE.wall);
-  px(ctx, x + w * s - s, y, s, h * s, PALETTE.wall);
-  // Window cross
-  px(ctx, x + Math.floor(w / 2) * s, y, s, h * s, PALETTE.wall);
-  px(ctx, x, y + Math.floor(h / 2) * s, w * s, s, PALETTE.wall);
-  // Sky glow
-  px(ctx, x + s, y + s, (w - 2) * s, (h - 2) * s, PALETTE.windowGlow + "44");
-}
-
-export default function PixelOffice({ agents, width = 800, height = 500 }: PixelOfficeProps) {
+export default function PixelOffice({
+  agents = [],
+  width = 1280,
+  height = 720,
+  onAgentClick,
+  selectedAgentId,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [activeAgent, setActiveAgent] = useState<string | null>(null);
+  const [coords, setCoords] = useState<Record<string, LayerInfo>>({});
+  const [loadedImages, setLoadedImages] = useState<Record<string, HTMLImageElement>>({});
+  const [loading, setLoading] = useState(true);
+  const [hoveredAgent, setHoveredAgent] = useState<Agent | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
+  // Load coords
   useEffect(() => {
+    loadLayerCoords().then(setCoords);
+  }, []);
+
+  // Load all images
+  useEffect(() => {
+    const imageMap: Record<string, HTMLImageElement> = {};
+    let loaded = 0;
+    const total = LAYER_ORDER.length + 1; // +1 for char-lobster
+
+    function checkDone() {
+      loaded++;
+      if (loaded >= total) {
+        setLoadedImages(imageMap);
+        setLoading(false);
+      }
+    }
+
+    // Background
+    const bg = new Image();
+    bg.src = "/office-assets/assets/room-bg.png";
+    bg.onload = () => { imageMap["room-bg"] = bg; checkDone(); };
+    bg.onerror = () => checkDone();
+
+    // Layers
+    const layerNames: Record<string, string> = {
+      "墙左": "layer-墙左.png",
+      "墙右": "layer-墙右.png",
+      "办公区": "layer-办公区.png",
+      "电脑椅子": "layer-电脑椅子.png",
+      "沙发地毯": "layer-沙发地毯.png",
+      "电视": "layer-电视.png",
+      "左边柜子": "layer-左边柜子.png",
+      "机柜": "layer-机柜.png",
+      "卫生间": "layer-卫生间.png",
+      "床": "layer-床.png",
+      "跑步机": "layer-跑步机.png",
+      "微波炉": "layer-微波炉.png",
+      "饮水机": "layer-饮水机.png",
+      "取暖器": "layer-取暖器.png",
+      "灯": "layer-灯.png",
+      "显示状态的机器": "layer-显示状态的机器.png",
+      "吉他": "layer-吉他.png",
+      "小家标识": "layer-小家标识.png",
+      "LOGO文字": "layer-LOGO文字.png",
+    };
+
+    for (const [layerKey, filename] of Object.entries(layerNames)) {
+      const img = new Image();
+      img.src = `/office-assets/assets/${filename}`;
+      img.onload = () => { imageMap[layerKey] = img; checkDone(); };
+      img.onerror = () => checkDone();
+    }
+
+    // Character sprite
+    const char = new Image();
+    char.src = "/office-assets/assets/char-lobster.png";
+    char.onload = () => { imageMap["char-lobster"] = char; checkDone(); };
+    char.onerror = () => checkDone();
+  }, []);
+
+  // Draw everything
+  useEffect(() => {
+    if (loading || !canvasRef.current) return;
     const canvas = canvasRef.current;
-    if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    // Non-null reference for use in nested closures
+    const c = ctx;
 
-    const scale = 4; // pixel scale
-    canvas.width = width;
-    canvas.height = height;
+    const scaleX = width / 1280;
+    const scaleY = height / 720;
 
-    // Disable image smoothing for pixel art look
-    ctx.imageSmoothingEnabled = false;
-
-    // Background - floor
-    for (let row = 0; row < height / scale; row++) {
-      for (let col = 0; col < width / scale; col++) {
-        const isLight = (row + col) % 2 === 0;
-        px(ctx, col * scale, row * scale, scale, scale, isLight ? PALETTE.floor : PALETTE.floorTile);
-      }
+    function drawImage(img: HTMLImageElement, layerKey: string) {
+      const info = coords[layerKey];
+      if (!info) return;
+      const [cx, cy] = info.canvas_center;
+      const [iw, ih] = info.canvas_size;
+      c.drawImage(img, (cx - iw / 2) * scaleX, (cy - ih / 2) * scaleY, iw * scaleX, ih * scaleY);
     }
 
-    // Back wall
-    px(ctx, 0, 0, width, Math.floor(120 / scale) * scale, PALETTE.wall);
-    px(ctx, 0, Math.floor(120 / scale) * scale - scale, width, scale, PALETTE.wallAccent);
+    // Clear
+    c.clearRect(0, 0, width, height);
 
-    // Window on the back wall
-    drawWindow(ctx, Math.floor(width * 0.3 / scale) * scale, Math.floor(20 / scale) * scale, scale, 8, 20);
-
-    // Carpet in center
-    for (let row = Math.floor(140 / scale); row < Math.floor(200 / scale); row++) {
-      for (let col = Math.floor(200 / scale); col < Math.floor(600 / scale); col++) {
-        const isLight = (row + col) % 3 === 0;
-        px(ctx, col * scale, row * scale, scale, scale, isLight ? "#2c1654" : "#231344");
-      }
+    // Draw room-bg (tile it or stretch)
+    const bg = loadedImages["room-bg"];
+    if (bg) {
+      c.drawImage(bg, 0, 0, width, height);
     }
 
-    // Plants in corners
-    drawPlant(ctx, Math.floor(20 / scale) * scale, Math.floor(80 / scale) * scale, scale);
-    drawPlant(ctx, Math.floor((width - 50) / scale) * scale, Math.floor(80 / scale) * scale, scale);
+    // Draw static layers
+    for (const key of LAYER_ORDER) {
+      if (key === "room-bg") continue;
+      const img = loadedImages[key];
+      if (img) drawImage(img, key);
+    }
 
-    // Bookshelf on the right
-    drawShelf(ctx, Math.floor((width - 40) / scale) * scale, Math.floor(30 / scale) * scale, scale, 16);
+    // Draw agents at desk positions
+    const displayAgents = agents.length > 0 ? agents : [];
+    displayAgents.forEach((agent, i) => {
+      const desk = DESK_POSITIONS[i] || DESK_POSITIONS[0];
+      const charImg = loadedImages["char-lobster"];
 
-    // Draw desks (one per agent, up to 4)
-    const deskPositions = [
-      { x: Math.floor(60 / scale) * scale, y: Math.floor(160 / scale) * scale },
-      { x: Math.floor(220 / scale) * scale, y: Math.floor(160 / scale) * scale },
-      { x: Math.floor(380 / scale) * scale, y: Math.floor(160 / scale) * scale },
-      { x: Math.floor(540 / scale) * scale, y: Math.floor(160 / scale) * scale },
-    ];
+      if (charImg) {
+        // Draw character sprite at desk position
+        const charW = 80 * scaleX;
+        const charH = 100 * scaleY;
+        const charX = (desk.x - charW / 2) * scaleX;
+        const charY = (desk.y - charH) * scaleY;
 
-    const onlineAgents = agents.slice(0, 4);
-    for (let i = 0; i < deskPositions.length; i++) {
-      const pos = deskPositions[i];
-      drawDesk(ctx, pos.x, pos.y, scale);
+        c.save();
+        c.globalAlpha = agent.status === "offline" ? 0.4 : 1.0;
+        c.drawImage(charImg, charX, charY, charW, charH);
 
-      if (i < onlineAgents.length) {
-        const agent = onlineAgents[i];
-        // Draw character at desk
-        const charX = pos.x + scale * 1;
-        const charY = pos.y - scale * 4;
-        drawPixelCharacter(ctx, charX, charY, scale, agent.status, agent.color || "#00d4aa", agent.emoji, agent.avatar);
-
-        // Name tag
-        pxText(ctx, agent.name.substring(0, 8), pos.x, pos.y + scale * 10, "#fff", 1);
+        // Draw agent name above character
+        c.globalAlpha = 0.85;
+        c.fillStyle = "rgba(0,0,0,0.6)";
+        const textWidth = c.measureText(agent.name).width;
+        c.fillRect(charX + charW / 2 - textWidth / 2 - 4, charY - 18 * scaleY, textWidth + 8, 16 * scaleY);
+        c.fillStyle = agent.color || "#00d4aa";
+        c.font = `${Math.round(10 * scaleX)}px monospace`;
+        c.textAlign = "center";
+        c.fillText(agent.name, charX + charW / 2, charY - 5 * scaleY);
+        c.restore();
 
         // Status dot
-        const statusColors: Record<string, string> = { online: "#00ff88", busy: "#ff6b6b", idle: "#ffd93d", offline: "#555" };
-        px(ctx, pos.x + scale * 11, pos.y + scale * 9, scale, scale, statusColors[agent.status] || "#555");
-      } else {
-        // Empty desk - "vacant" sign
-        px(ctx, pos.x + scale * 2, pos.y - scale * 2, scale * 8, scale * 2, "#333");
-        pxText(ctx, "[ vacant ]", pos.x + scale * 2, pos.y - scale * 1, "#666", 1);
+        c.beginPath();
+        c.arc((desk.x + 30) * scaleX, (desk.y - charH + 10) * scaleY, 6 * scaleX, 0, Math.PI * 2);
+        c.fillStyle = getStatusColor(agent.status);
+        c.fill();
+        c.strokeStyle = "#000";
+        c.lineWidth = 1;
+        c.stroke();
+      }
+
+      // Invisible hit area for click
+      const hitX = (desk.x - 40) * scaleX;
+      const hitY = (desk.y - 100) * scaleY;
+      const hitW = 80 * scaleX;
+      const hitH = 100 * scaleY;
+      (canvas as any).__agentHitAreas = (canvas as any).__agentHitAreas || [];
+      (canvas as any).__agentHitAreas[i] = { x: hitX, y: hitY, w: hitW, h: hitH, agent };
+    });
+
+    // Hover tooltip
+    if (hoveredAgent) {
+      const idx = displayAgents.indexOf(hoveredAgent);
+      if (idx >= 0) {
+        const desk = DESK_POSITIONS[idx] || DESK_POSITIONS[0];
+        const tx = desk.x * scaleX;
+        const ty = (desk.y - 120) * scaleY;
+        const statusColor = getStatusColor(hoveredAgent.status);
+        c.save();
+        c.fillStyle = "rgba(10,10,20,0.9)";
+        const tw = Math.max(80, c.measureText(hoveredAgent.name).width + 24);
+        c.beginPath();
+        c.roundRect(tx - tw / 2, ty - 28 * scaleY, tw, 36 * scaleY, 6);
+        c.fill();
+        c.strokeStyle = hoveredAgent.color || "#00d4aa";
+        c.lineWidth = 1.5;
+        c.stroke();
+        c.fillStyle = "#fff";
+        c.font = `bold ${Math.round(11 * scaleX)}px monospace`;
+        c.textAlign = "center";
+        c.fillText(hoveredAgent.name, tx, ty - 10 * scaleY);
+        c.fillStyle = statusColor;
+        c.font = `${Math.round(9 * scaleX)}px monospace`;
+        c.fillText(hoveredAgent.status || "offline", tx, ty - 0 * scaleY);
+        c.restore();
       }
     }
+  }, [loading, loadedImages, coords, agents, width, height, hoveredAgent]);
 
-    // Floor decorations - cable runs
-    px(ctx, Math.floor(80 / scale) * scale, Math.floor(220 / scale) * scale, Math.floor(560 / scale) * scale, scale, PALETTE.cable);
+  // Mouse interaction
+  function getAgentAtPoint(canvas: HTMLCanvasElement, clientX: number, clientY: number): Agent | null {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+    const hitAreas: Array<{ x: number; y: number; w: number; h: number; agent: Agent }> = (canvas as any).__agentHitAreas || [];
+    for (const hit of hitAreas) {
+      if (x >= hit.x && x <= hit.x + hit.w && y >= hit.y && y <= hit.y + hit.h) {
+        return hit.agent;
+      }
+    }
+    return null;
+  }
 
-    // Clock on wall
-    const clockX = Math.floor((width - 30) / scale) * scale;
-    px(ctx, clockX, Math.floor(30 / scale) * scale, scale * 4, scale * 4, "#f4d03f");
-    px(ctx, clockX + scale, Math.floor(30 / scale) * scale, scale * 2, scale * 4, PALETTE.wall);
-    const now = new Date();
-    pxText(ctx, `${now.getHours().toString().padStart(2,"0")}:${now.getMinutes().toString().padStart(2,"0")}`, clockX - scale * 2, Math.floor(38 / scale) * scale, "#fff", 0.8);
-
-    // "Claworld Office" sign
-    const signX = Math.floor(width * 0.05 / scale) * scale;
-    px(ctx, signX, Math.floor(15 / scale) * scale, scale * 12, scale * 4, "#694489");
-    pxText(ctx, "CLA WORLD OFFICE", signX + scale, Math.floor(22 / scale) * scale, "#fff", 1);
-
-    // Clickable areas: for now we just track the active agent
-  }, [agents, width, height, activeAgent]);
+  if (loading) {
+    return (
+      <div style={{
+        width: "100%", height: `${Math.round((height / width) * 100)}%`,
+        maxHeight: height,
+        background: "var(--surface)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        color: "var(--text-muted)", fontSize: "13px", borderRadius: "var(--radius-lg)"
+      }}>
+        Loading office assets...
+      </div>
+    );
+  }
 
   return (
-    <div style={{ position: "relative", borderRadius: "var(--radius-lg)", overflow: "hidden", border: "1px solid var(--border)" }}>
+    <div style={{ position: "relative", width: "100%" }}>
       <canvas
         ref={canvasRef}
-        style={{ display: "block", width: "100%", height: "auto", imageRendering: "pixelated" }}
+        width={width}
+        height={height}
+        style={{
+          width: "100%",
+          height: "auto",
+          display: "block",
+          cursor: "pointer",
+          borderRadius: "var(--radius-lg)",
+        }}
+        onMouseMove={(e) => {
+          const agent = getAgentAtPoint(e.currentTarget, e.clientX, e.clientY);
+          setHoveredAgent(agent);
+          setMousePos({ x: e.clientX - (e.currentTarget.getBoundingClientRect().left), y: e.clientY - e.currentTarget.getBoundingClientRect().top });
+        }}
+        onMouseLeave={() => setHoveredAgent(null)}
         onClick={(e) => {
-          // Simple click detection for agents
-          const rect = canvasRef.current?.getBoundingClientRect();
-          if (!rect) return;
-          const scaleX = canvasRef.current!.width / rect.width;
-          const scaleY = canvasRef.current!.height / rect.height;
-          const x = (e.clientX - rect.left) * scaleX;
-          const y = (e.clientY - rect.top) * scaleY;
-
-          // Check which desk was clicked
-          const deskXs = [60, 220, 380, 540];
-          for (let i = 0; i < deskXs.length; i++) {
-            if (x >= deskXs[i] && x <= deskXs[i] + 100) {
-              const agent = agents[i];
-              if (agent) setActiveAgent(activeAgent === agent.id ? null : agent.id);
-              break;
-            }
-          }
+          const agent = getAgentAtPoint(e.currentTarget, e.clientX, e.clientY);
+          if (agent && onAgentClick) onAgentClick(agent);
         }}
       />
-
-      {/* Active agent tooltip */}
-      {activeAgent && (() => {
-        const agent = agents.find((a) => a.id === activeAgent);
-        if (!agent) return null;
-        const statusLabels: Record<string, string> = {
-          online: "在线",
-          busy: "忙碌中",
-          idle: "空闲",
-          offline: "离线",
-        };
-        return (
-          <div
-            style={{
-              position: "absolute",
-              top: "12px",
-              right: "12px",
-              background: "var(--surface-elevated)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius-md)",
-              padding: "10px 14px",
-              fontSize: "12px",
-              color: "var(--text-primary)",
-              boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-            }}
-          >
-            <div style={{ fontWeight: 700, marginBottom: "4px" }}>{agent.name}</div>
-            <div style={{ color: "var(--text-muted)", fontSize: "11px" }}>
-              {statusLabels[agent.status] || agent.status}
-            </div>
+      {hoveredAgent && (
+        <div style={{
+          position: "absolute",
+          bottom: "12px",
+          left: "12px",
+          padding: "6px 12px",
+          background: "rgba(10,10,20,0.85)",
+          border: `1px solid ${hoveredAgent.color || "#00d4aa"}`,
+          borderRadius: "var(--radius-md)",
+          fontSize: "11px",
+          color: "#fff",
+          pointerEvents: "none",
+        }}>
+          <div style={{ fontWeight: 700 }}>{hoveredAgent.name}</div>
+          <div style={{ color: getStatusColor(hoveredAgent.status), textTransform: "capitalize" }}>
+            ● {hoveredAgent.status || "offline"}
           </div>
-        );
-      })()}
+        </div>
+      )}
     </div>
   );
 }
