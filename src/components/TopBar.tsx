@@ -41,17 +41,25 @@ export function TopBar() {
         zIndex: 30,
       }}
     >
-      {/* Page title */}
-      <div
-        style={{
-          fontFamily: "var(--font-heading)",
-          fontSize: "16px",
-          fontWeight: 700,
-          color: "var(--text-primary)",
-          letterSpacing: "-0.3px",
-        }}
-      >
-        {title}
+      {/* Logo + Page title */}
+      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <img
+          src="/branding/logo-light.png"
+          alt="Claworld"
+          style={{ height: "28px", width: "auto", objectFit: "contain" }}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
+        <div
+          style={{
+            fontFamily: "var(--font-heading)",
+            fontSize: "16px",
+            fontWeight: 700,
+            color: "var(--text-primary)",
+            letterSpacing: "-0.3px",
+          }}
+        >
+          {title}
+        </div>
       </div>
 
       {/* Actions */}

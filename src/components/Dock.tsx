@@ -17,6 +17,8 @@ import {
   GitBranch,
   Brain,
   MessageSquare,
+  CalendarDays,
+  Terminal,
   X,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -31,6 +33,8 @@ const navItems = [
   { href: "/git", label: "Git", icon: GitBranch },
   { href: "/memory", label: "记忆", icon: Brain },
   { href: "/costs", label: "成本", icon: DollarSign },
+  { href: "/calendar", label: "日历", icon: CalendarDays },
+  { href: "/terminal", label: "终端", icon: Terminal },
   { href: "/sessions", label: "会话", icon: MessageSquare },
 ];
 
@@ -122,18 +126,22 @@ export function Dock() {
             marginBottom: isMobile ? "0" : "8px",
           }}
         >
-          <span style={{ fontSize: "20px" }}>🐟</span>
-          <span
-            style={{
-              fontFamily: "var(--font-heading)",
-              fontWeight: 700,
-              fontSize: "15px",
-              color: "var(--text-primary)",
-              letterSpacing: "-0.5px",
+          <img
+            src="/branding/logo-light.png"
+            alt="Claworld"
+            style={{ height: "28px", width: "auto", objectFit: "contain" }}
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+              // Fallback: show emoji
+              const parent = (e.target as HTMLImageElement).parentElement;
+              if (parent) {
+                const emoji = document.createElement("span");
+                emoji.textContent = "🐟";
+                emoji.style.fontSize = "20px";
+                parent.prepend(emoji);
+              }
             }}
-          >
-            Claworld
-          </span>
+          />
         </div>
 
         {!isMobile && (
