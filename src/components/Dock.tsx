@@ -19,6 +19,8 @@ import {
   MessageSquare,
   CalendarDays,
   Terminal,
+  Bot,
+  LayoutGrid,
   X,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -26,7 +28,8 @@ import { useI18n } from "@/i18n/context";
 
 const NAV_ITEMS = [
   { href: "/", labelKey: "首页", labelKeyEn: "Dashboard", icon: LayoutDashboard },
-  { href: "/activities", labelKey: "活动", labelKeyEn: "Activities", icon: Activity },
+  { href: "/office", labelKey: "办公室", labelKeyEn: "Office", icon: LayoutGrid },
+  { href: "/agents", labelKey: "团队", labelKeyEn: "Agents", icon: Bot },
   { href: "/search", labelKey: "搜索", labelKeyEn: "Search", icon: Search },
   { href: "/cron", labelKey: "定时", labelKeyEn: "Cron", icon: Timer },
   { href: "/skills", labelKey: "Skills", labelKeyEn: "Skills", icon: Puzzle },
