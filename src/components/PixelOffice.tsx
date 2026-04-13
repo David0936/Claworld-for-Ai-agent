@@ -20,27 +20,33 @@ interface LayerInfo {
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
 
+// Z-order: furthest back → closest to camera
+// Later in this list = drawn later = appears in front
+// Character (龙虾角色) must be last = closest to camera / most prominent
 const LAYER_FILES: [string, string][] = [
-  ["room-bg", "room-bg.png"],
-  ["墙左", "layer-墙左.png"],
-  ["墙右", "layer-墙右.png"],
-  ["机柜", "layer-机柜.png"],
-  ["显示状态的机器", "layer-显示状态的机器.png"],
-  ["左边柜子", "layer-左边柜子.png"],
-  ["床", "layer-床.png"],
-  ["跑步机", "layer-跑步机.png"],
-  ["沙发地毯", "layer-沙发地毯.png"],
-  ["办公区", "layer-办公区.png"],
-  ["卫生间", "layer-卫生间.png"],
-  ["电视", "layer-电视.png"],
-  ["电脑椅子", "layer-电脑椅子.png"],
-  ["微波炉", "layer-微波炉.png"],
-  ["饮水机", "layer-饮水机.png"],
-  ["取暖器", "layer-取暖器.png"],
-  ["灯", "layer-灯.png"],
-  ["吉他", "layer-吉他.png"],
-  ["小家标识", "layer-小家标识.png"],
-  ["LOGO文字", "layer-LOGO文字.png"],
+  ["room-bg", "room-bg.png"],                          // 1. 背景
+  ["墙左", "layer-墙左.png"],                          // 2. 左墙
+  ["墙右", "layer-墙右.png"],                          // 3. 右墙
+  ["床", "layer-床.png"],                              // 4. 床
+  ["跑步机", "layer-跑步机.png"],                      // 5. 跑步机
+  ["卫生间", "layer-卫生间.png"],                      // 6. 卫生间
+  ["机柜", "layer-机柜.png"],                          // 7. 机柜
+  ["显示状态的机器", "layer-显示状态的机器.png"],       // 8. 状态机器
+  ["左边柜子", "layer-左边柜子.png"],                  // 9. 左边柜
+  ["电视", "layer-电视.png"],                          // 10. 电视
+  ["办公区", "layer-办公区.png"],                      // 11. 办公区
+  ["微波炉", "layer-微波炉.png"],                      // 12. 微波炉
+  ["饮水机", "layer-饮水机.png"],                      // 13. 饮水机
+  ["取暖器", "layer-取暖器.png"],                      // 14. 取暖器
+  ["吉他", "layer-吉他.png"],                          // 15. 吉他
+  ["沙发地毯", "layer-沙发地毯.png"],                  // 16. 沙发+地毯
+  ["电脑椅子", "layer-电脑椅子.png"],                  // 17. 电脑椅子
+  // 人物龙虾: coords [650, 417] size [417, 447] — 画在椅子"后面"
+  // （椅子是前景框架，人物在椅子上方视野里）
+  ["龙虾角色", "char-lobster.png"],                    // 18. 龙虾角色
+  ["灯", "layer-灯.png"],                              // 19. 灯（墙上方）
+  ["小家标识", "layer-小家标识.png"],                  // 20. 小家标识
+  ["LOGO文字", "layer-LOGO文字.png"],                  // 21. LOGO文字
 ];
 
 const STATUS_COLORS: Record<string, string> = {
@@ -49,8 +55,6 @@ const STATUS_COLORS: Record<string, string> = {
   idle: "#ffd93d",
   offline: "#555555",
 };
-
-const AGENT_POS = { x: 200, y: 510 };
 
 interface Props {
   agents?: Agent[];
@@ -132,12 +136,13 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
 
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
-    // Draw background
+    // Draw background first
+    const bgUrl = layerUrls["room-bg.png"] ?? "/office-assets/assets/room-bg.png";
     const bgImg = new Image();
     bgImg.onload = () => {
       ctx.drawImage(bgImg, 0, 0, CANVAS_W, CANVAS_H);
 
-      // Draw layers
+      // Draw all layers in order (LAYER_FILES defines z-order back→front)
       const layerPromises = LAYER_FILES.filter(
         ([, fn]) => fn !== "room-bg.png" && layerUrls[fn]
       ).map(async ([key, fn]) => {
@@ -152,44 +157,45 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
       Promise.all(layerPromises).then(() => {
         if (!agents[0]) return;
         const ag = agents[0];
-        const img = new Image();
-        img.onload = () => {
-          const cw = 120;
-          const ch = 150;
-          const cx = AGENT_POS.x - cw / 2;
-          const cy = AGENT_POS.y - ch;
-          ctx.globalAlpha = ag.status === "offline" ? 0.35 : 1;
-          ctx.drawImage(img, cx, cy, cw, ch);
-          ctx.globalAlpha = 1;
 
-          const sc = STATUS_COLORS[ag.status || "offline"];
-          ctx.font = "bold 13px monospace";
-          const tw = ctx.measureText(ag.name).width;
-          const tx = AGENT_POS.x - tw / 2 - 8;
-          const ty = cy - 10;
-          ctx.fillStyle = "rgba(0,0,0,0.75)";
-          ctx.fillRect(tx, ty, tw + 16, 20);
-          ctx.strokeStyle = ag.color;
-          ctx.lineWidth = 1.5;
-          ctx.strokeRect(tx, ty, tw + 16, 20);
-          ctx.fillStyle = "#fff";
-          ctx.textAlign = "center";
-          ctx.fillText(ag.name, AGENT_POS.x, ty + 14);
-          ctx.beginPath();
-          ctx.arc(AGENT_POS.x + 30, cy + 20, 5, 0, Math.PI * 2);
-          ctx.fillStyle = sc;
-          ctx.fill();
-          ctx.strokeStyle = "#000";
-          ctx.lineWidth = 1;
-          ctx.stroke();
-        };
-        img.onerror = () => {};
-        img.src = charUrl;
+        // Draw status badge on top of everything (name tag + status dot)
+        const charInfo = coords["龙虾角色"];
+        if (!charInfo) return;
+        const [ccx, ccy] = charInfo.canvas_center;
+        const [cw, ch] = charInfo.canvas_size;
+        const tagX = ccx - cw / 2 - 20;
+        const tagY = ccy - ch / 2 - 30;
+        const name = ag.name;
+        ctx.font = "bold 13px monospace";
+        const tw = ctx.measureText(name).width;
+        ctx.fillStyle = "rgba(0,0,0,0.75)";
+        ctx.fillRect(tagX, tagY, tw + 16, 20);
+        ctx.strokeStyle = ag.color;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(tagX, tagY, tw + 16, 20);
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
+        ctx.fillText(name, tagX + tw / 2 + 8, tagY + 14);
+
+        // Status dot
+        const sc = STATUS_COLORS[ag.status || "offline"];
+        ctx.beginPath();
+        ctx.arc(tagX + tw + 16 + 8, tagY + 10, 5, 0, Math.PI * 2);
+        ctx.fillStyle = sc;
+        ctx.fill();
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Global alpha for offline agents
+        if (ag.status === "offline") {
+          ctx.globalAlpha = 0.35;
+        }
       });
     };
     bgImg.onerror = () => {};
-    bgImg.src = layerUrls["room-bg.png"] ?? "/office-assets/assets/room-bg.png";
-  }, [layerUrls, charUrl, coords, agents, ready]);
+    bgImg.src = bgUrl;
+  }, [layerUrls, coords, agents, ready]);
 
   return (
     <div
