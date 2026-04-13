@@ -21,32 +21,30 @@ const CANVAS_W = 1280;
 const CANVAS_H = 720;
 
 // Z-order: furthest back → closest to camera
-// Later in this list = drawn later = appears in front
-// Character (龙虾角色) must be last = closest to camera / most prominent
+// Based on actual content bounds analysis (x, y = pixel position in 1280x720):
+// Back wall (high y) → Mid ground → Foreground floor (low y)
+// Z-order: furthest back → closest to camera (later in list = drawn last = in front)
+// Verified against layer-coords.json psd_bbox: 机柜→沙发→椅子→标识→LOGO
 const LAYER_FILES: [string, string][] = [
   ["room-bg", "room-bg.png"],                          // 1. 背景
-  ["墙左", "layer-墙左.png"],                          // 2. 左墙
-  ["墙右", "layer-墙右.png"],                          // 3. 右墙
-  ["床", "layer-床.png"],                              // 4. 床
-  ["跑步机", "layer-跑步机.png"],                      // 5. 跑步机
-  ["卫生间", "layer-卫生间.png"],                      // 6. 卫生间
-  ["机柜", "layer-机柜.png"],                          // 7. 机柜
-  ["显示状态的机器", "layer-显示状态的机器.png"],       // 8. 状态机器
-  ["左边柜子", "layer-左边柜子.png"],                  // 9. 左边柜
-  ["电视", "layer-电视.png"],                          // 10. 电视
-  ["办公区", "layer-办公区.png"],                      // 11. 办公区
-  ["微波炉", "layer-微波炉.png"],                      // 12. 微波炉
+  ["办公区", "layer-办公区.png"],                      // 2. 办公区
+  ["墙左", "layer-墙左.png"],                          // 3. 左墙
+  ["墙右", "layer-墙右.png"],                          // 4. 右墙
+  ["灯", "layer-灯.png"],                              // 5. 灯
+  ["卫生间", "layer-卫生间.png"],                       // 6. 卫生间
+  ["显示状态的机器", "layer-显示状态的机器.png"],        // 7. 显示状态机器
+  ["电视", "layer-电视.png"],                          // 8. 电视
+  ["微波炉", "layer-微波炉.png"],                      // 9. 微波炉
+  ["取暖器", "layer-取暖器.png"],                     // 10. 取暖器
+  ["跑步机", "layer-跑步机.png"],                     // 11. 跑步机
+  ["床", "layer-床.png"],                              // 12. 床
   ["饮水机", "layer-饮水机.png"],                      // 13. 饮水机
-  ["取暖器", "layer-取暖器.png"],                      // 14. 取暖器
-  ["吉他", "layer-吉他.png"],                          // 15. 吉他
-  ["沙发地毯", "layer-沙发地毯.png"],                  // 16. 沙发+地毯
-  ["电脑椅子", "layer-电脑椅子.png"],                  // 17. 电脑椅子
-  // 人物龙虾: coords [650, 417] size [417, 447] — 画在椅子"后面"
-  // （椅子是前景框架，人物在椅子上方视野里）
-  ["龙虾角色", "char-lobster.png"],                    // 18. 龙虾角色
-  ["灯", "layer-灯.png"],                              // 19. 灯（墙上方）
-  ["小家标识", "layer-小家标识.png"],                  // 20. 小家标识
-  ["LOGO文字", "layer-LOGO文字.png"],                  // 21. LOGO文字
+  ["沙发地毯", "layer-沙发地毯.png"],                  // 14. 沙发地毯
+  ["机柜", "layer-机柜.png"],                          // 15. 机柜
+  ["电脑椅子", "layer-电脑椅子.png"],                  // 16. 电脑椅子
+  ["龙虾角色", "layer-龙虾角色.png"],                  // 17. 龙虾
+  ["小家标识", "layer-小家标识.png"],                  // 18. 小家标识
+  ["LOGO文字", "layer-LOGO文字.png"],                  // 19. LOGO文字
 ];
 
 const STATUS_COLORS: Record<string, string> = {
@@ -75,7 +73,6 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState<Record<string, LayerInfo>>({});
   const [layerUrls, setLayerUrls] = useState<Record<string, string>>({});
-  const [charUrl, setCharUrl] = useState("/office-assets/assets/char-lobster.png");
   const [ready, setReady] = useState(false);
 
   const { manifest: activeManifest } = useActiveAsset();
@@ -89,14 +86,13 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
       .finally(() => setReady(true));
   }, []);
 
-  // Reload layer URLs when active manifest changes
+  // Load asset-specific files when active manifest changes
   useEffect(() => {
     if (!ready) return;
     const assetId = activeManifest?.id ?? "default";
 
     async function load() {
       const urls: Record<string, string> = {};
-
       for (const [, filename] of LAYER_FILES) {
         if (assetId === "default") {
           urls[filename] = `/office-assets/assets/${filename}`;
@@ -107,14 +103,8 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
             : `/office-assets/assets/${filename}`;
         }
       }
-
-      const charBlob = await getAssetFile(`custom/${assetId}/char-lobster.png`);
       setLayerUrls(urls);
-      setCharUrl(
-        charBlob ? URL.createObjectURL(charBlob) : "/office-assets/assets/char-lobster.png"
-      );
     }
-
     load();
   }, [activeManifest, ready]);
 
@@ -136,13 +126,13 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
 
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
-    // Draw background first
+    // Load background first
     const bgUrl = layerUrls["room-bg.png"] ?? "/office-assets/assets/room-bg.png";
     const bgImg = new Image();
     bgImg.onload = () => {
       ctx.drawImage(bgImg, 0, 0, CANVAS_W, CANVAS_H);
 
-      // Draw all layers in order (LAYER_FILES defines z-order back→front)
+      // Draw all layers sequentially in z-order
       const layerPromises = LAYER_FILES.filter(
         ([, fn]) => fn !== "room-bg.png" && layerUrls[fn]
       ).map(async ([key, fn]) => {
@@ -158,7 +148,7 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
         if (!agents[0]) return;
         const ag = agents[0];
 
-        // Draw status badge on top of everything (name tag + status dot)
+        // Status badge for the agent
         const charInfo = coords["龙虾角色"];
         if (!charInfo) return;
         const [ccx, ccy] = charInfo.canvas_center;
@@ -187,7 +177,6 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
         ctx.lineWidth = 1;
         ctx.stroke();
 
-        // Global alpha for offline agents
         if (ag.status === "offline") {
           ctx.globalAlpha = 0.35;
         }
