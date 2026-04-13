@@ -1,0 +1,22 @@
+{
+  "id": "default",
+  "name": "Default Office",
+  "nameZh": "默认办公室",
+  "version": "0.1.0",
+  "containerVersion": ">=0.1.0",
+  "type": "skin",
+  "author": "Claworld Team",
+  "authorContact": "support@claworld.cc",
+  "description": "经典 Claworld 像素办公室。简洁，专业、稳定的默认工作空间。",
+  "preview": "",
+  "tags": ["default", "office", "minimal"],
+  "license": "personal",
+  "replaceLayers": [],
+  "assets": {
+    "room-bg.png": "/office-assets/assets/room-bg.png",
+    "char-lobster.png": "/office-assets/assets/char-lobster.png",
+    "layer-coords.json": "/office-assets/assets/layer-coords.json"
+  },
+  "installedAt": null,
+  "sizeBytes": 0
+}

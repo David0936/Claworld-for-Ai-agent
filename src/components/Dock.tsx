@@ -22,6 +22,7 @@ import {
   Bot,
   LayoutGrid,
   ShoppingBag,
+  Package,
   Users,
   X,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import { useI18n } from "@/i18n/context";
 const NAV_ITEMS = [
   { href: "/", labelKey: "首页", labelKeyEn: "Dashboard", icon: LayoutDashboard },
   { href: "/office", labelKey: "办公室", labelKeyEn: "Office", icon: LayoutGrid },
+  { href: "/library", labelKey: "资产库", labelKeyEn: "Library", icon: Package },
   { href: "/shop", labelKey: "商城", labelKeyEn: "Shop", icon: ShoppingBag },
   { href: "/tenants", labelKey: "房客", labelKeyEn: "Tenants", icon: Users },
   { href: "/agents", labelKey: "团队", labelKeyEn: "Agents", icon: Bot },
