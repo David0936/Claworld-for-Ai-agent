@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useActiveAsset } from "@/hooks/useActiveAsset";
+import { getAssetFile } from "@/lib/asset-storage";
 
 interface Agent {
   id: string;
@@ -18,7 +20,6 @@ interface LayerInfo {
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
 
-// Layer z-order: back → front
 const LAYER_FILES: [string, string][] = [
   ["room-bg", "room-bg.png"],
   ["墙左", "layer-墙左.png"],
@@ -34,8 +35,8 @@ const LAYER_FILES: [string, string][] = [
   ["电视", "layer-电视.png"],
   ["电脑椅子", "layer-电脑椅子.png"],
   ["微波炉", "layer-微波炉.png"],
-  ["饮水机", "layer-饮水机-ps.png"],
-  ["取暖器", "layer-取暖器-ps.png"],
+  ["饮水机", "layer-饮水机.png"],
+  ["取暖器", "layer-取暖器.png"],
   ["灯", "layer-灯.png"],
   ["吉他", "layer-吉他.png"],
   ["小家标识", "layer-小家标识.png"],
@@ -49,142 +50,146 @@ const STATUS_COLORS: Record<string, string> = {
   offline: "#555555",
 };
 
-// Agent sits on the sofa (bottom-left area)
 const AGENT_POS = { x: 200, y: 510 };
 
 interface Props {
   agents?: Agent[];
-  width?: number;
-  height?: number;
   onAgentClick?: (agent: Agent) => void;
+}
+
+function loadImg(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(img);
+    img.src = url;
+  });
 }
 
 export default function PixelOffice({ agents = [], onAgentClick }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState<Record<string, LayerInfo>>({});
-  const [loaded, setLoaded] = useState(false);
+  const [layerUrls, setLayerUrls] = useState<Record<string, string>>({});
+  const [charUrl, setCharUrl] = useState("/office-assets/assets/char-lobster.png");
+  const [ready, setReady] = useState(false);
+
+  const { manifest: activeManifest } = useActiveAsset();
 
   // Load coords
   useEffect(() => {
     fetch("/office-assets/assets/layer-coords.json")
       .then((r) => r.json())
-      .then((data) => {
-        setCoords(data);
-        setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
+      .then((data) => setCoords(data))
+      .catch(() => {})
+      .finally(() => setReady(true));
   }, []);
 
-  // Load images and draw
+  // Reload layer URLs when active manifest changes
   useEffect(() => {
-    if (!loaded || !canvasRef.current) return;
+    if (!ready) return;
+    const assetId = activeManifest?.id ?? "default";
 
+    async function load() {
+      const urls: Record<string, string> = {};
+
+      for (const [, filename] of LAYER_FILES) {
+        if (assetId === "default") {
+          urls[filename] = `/office-assets/assets/${filename}`;
+        } else {
+          const blob = await getAssetFile(`custom/${assetId}/${filename}`);
+          urls[filename] = blob
+            ? URL.createObjectURL(blob)
+            : `/office-assets/assets/${filename}`;
+        }
+      }
+
+      const charBlob = await getAssetFile(`custom/${assetId}/char-lobster.png`);
+      setLayerUrls(urls);
+      setCharUrl(
+        charBlob ? URL.createObjectURL(charBlob) : "/office-assets/assets/char-lobster.png"
+      );
+    }
+
+    load();
+  }, [activeManifest, ready]);
+
+  // Draw
+  useEffect(() => {
     const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container || !ready || Object.keys(layerUrls).length === 0) return;
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    // Non-null reference for closures
-    const c = ctx;
 
-    const images: Record<string, HTMLImageElement> = {};
-    let pending = LAYER_FILES.length + 1; // +1 for char-lobster
+    const containerW = container.clientWidth;
+    const scale = containerW / CANVAS_W;
+    canvas.width = CANVAS_W;
+    canvas.height = CANVAS_H;
+    canvas.style.width = `${containerW}px`;
+    canvas.style.height = `${CANVAS_H * scale}px`;
 
-    function done() {
-      pending--;
-      if (pending > 0) return;
+    ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
-      // Draw
-      const containerW = containerRef.current?.clientWidth || 900;
-      const scale = containerW / CANVAS_W;
+    // Draw background
+    const bgImg = new Image();
+    bgImg.onload = () => {
+      ctx.drawImage(bgImg, 0, 0, CANVAS_W, CANVAS_H);
 
-      canvas.width = CANVAS_W;
-      canvas.height = CANVAS_H;
-      canvas.style.width = `${containerW}px`;
-      canvas.style.height = `${CANVAS_H * scale}px`;
-
-      // Clear
-      c.clearRect(0, 0, CANVAS_W, CANVAS_H);
-
-      function draw(key: string, img: HTMLImageElement) {
+      // Draw layers
+      const layerPromises = LAYER_FILES.filter(
+        ([, fn]) => fn !== "room-bg.png" && layerUrls[fn]
+      ).map(async ([key, fn]) => {
+        const img = await loadImg(layerUrls[fn]);
         const info = coords[key];
         if (!info) return;
         const [cx, cy] = info.canvas_center;
         const [iw, ih] = info.canvas_size;
-        c.drawImage(img, cx - iw / 2, cy - ih / 2, iw, ih);
-      }
+        ctx.drawImage(img, cx - iw / 2, cy - ih / 2, iw, ih);
+      });
 
-      // Background
-      if (images["room-bg"]) {
-        c.drawImage(images["room-bg"], 0, 0, CANVAS_W, CANVAS_H);
-      }
+      Promise.all(layerPromises).then(() => {
+        if (!agents[0]) return;
+        const ag = agents[0];
+        const img = new Image();
+        img.onload = () => {
+          const cw = 120;
+          const ch = 150;
+          const cx = AGENT_POS.x - cw / 2;
+          const cy = AGENT_POS.y - ch;
+          ctx.globalAlpha = ag.status === "offline" ? 0.35 : 1;
+          ctx.drawImage(img, cx, cy, cw, ch);
+          ctx.globalAlpha = 1;
 
-      // Layers in order
-      for (const [key, filename] of LAYER_FILES) {
-        if (key === "room-bg" || !images[key]) continue;
-        draw(key, images[key]);
-      }
-
-      // Agent character
-      const mainAgent = agents[0];
-      if (mainAgent && images["char-lobster"]) {
-        const charImg = images["char-lobster"];
-        const charW = 120;
-        const charH = 150;
-        const charX = AGENT_POS.x - charW / 2;
-        const charY = AGENT_POS.y - charH;
-
-        c.globalAlpha = mainAgent.status === "offline" ? 0.35 : 1;
-        c.drawImage(charImg, charX, charY, charW, charH);
-        c.globalAlpha = 1;
-
-        // Name tag
-        const statusColor = STATUS_COLORS[mainAgent.status || "offline"];
-        const name = mainAgent.name;
-        c.font = "bold 13px monospace";
-        const tw = c.measureText(name).width;
-        const tagX = AGENT_POS.x - tw / 2 - 8;
-        const tagY = charY - 10;
-        c.fillStyle = "rgba(0,0,0,0.75)";
-        c.fillRect(tagX, tagY, tw + 16, 20);
-        c.strokeStyle = mainAgent.color;
-        c.lineWidth = 1.5;
-        c.strokeRect(tagX, tagY, tw + 16, 20);
-        c.fillStyle = "#fff";
-        c.textAlign = "center";
-        c.fillText(name, AGENT_POS.x, tagY + 14);
-
-        // Status dot
-        c.beginPath();
-        c.arc(AGENT_POS.x + 30, charY + 20, 5, 0, Math.PI * 2);
-        c.fillStyle = statusColor;
-        c.fill();
-        c.strokeStyle = "#000";
-        c.lineWidth = 1;
-        c.stroke();
-      }
-    }
-
-    // Load background
-    const bg = new window.Image();
-    bg.src = "/office-assets/assets/room-bg.png";
-    bg.onload = () => { images["room-bg"] = bg; done(); };
-    bg.onerror = () => done();
-
-    // Load layers
-    for (const [key, filename] of LAYER_FILES) {
-      if (key === "room-bg") continue;
-      const img = new window.Image();
-      img.src = `/office-assets/assets/${filename}`;
-      img.onload = () => { images[key] = img; done(); };
-      img.onerror = () => done();
-    }
-
-    // Load character
-    const char = new window.Image();
-    char.src = "/office-assets/assets/char-lobster.png";
-    char.onload = () => { images["char-lobster"] = char; done(); };
-    char.onerror = () => done();
-  }, [loaded, coords, agents]);
+          const sc = STATUS_COLORS[ag.status || "offline"];
+          ctx.font = "bold 13px monospace";
+          const tw = ctx.measureText(ag.name).width;
+          const tx = AGENT_POS.x - tw / 2 - 8;
+          const ty = cy - 10;
+          ctx.fillStyle = "rgba(0,0,0,0.75)";
+          ctx.fillRect(tx, ty, tw + 16, 20);
+          ctx.strokeStyle = ag.color;
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(tx, ty, tw + 16, 20);
+          ctx.fillStyle = "#fff";
+          ctx.textAlign = "center";
+          ctx.fillText(ag.name, AGENT_POS.x, ty + 14);
+          ctx.beginPath();
+          ctx.arc(AGENT_POS.x + 30, cy + 20, 5, 0, Math.PI * 2);
+          ctx.fillStyle = sc;
+          ctx.fill();
+          ctx.strokeStyle = "#000";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        };
+        img.onerror = () => {};
+        img.src = charUrl;
+      });
+    };
+    bgImg.onerror = () => {};
+    bgImg.src = layerUrls["room-bg.png"] ?? "/office-assets/assets/room-bg.png";
+  }, [layerUrls, charUrl, coords, agents, ready]);
 
   return (
     <div
@@ -192,7 +197,7 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
       style={{
         position: "relative",
         width: "100%",
-        borderRadius: "var(--radius-lg)",
+        borderRadius: "var(--radius-lg, 12px)",
         overflow: "hidden",
         background: "#0a0a14",
         lineHeight: 0,
@@ -210,7 +215,7 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
           if (agents[0]) onAgentClick?.(agents[0]);
         }}
       />
-      {!loaded && (
+      {!ready && (
         <div
           style={{
             position: "absolute",
@@ -224,6 +229,24 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
           }}
         >
           Loading office...
+        </div>
+      )}
+      {ready && activeManifest && activeManifest.id !== "default" && (
+        <div
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            background: "rgba(0,0,0,0.7)",
+            border: "1px solid rgba(255,56,92,0.4)",
+            borderRadius: 20,
+            padding: "3px 10px",
+            fontSize: 11,
+            fontFamily: "monospace",
+            color: "#FF385C",
+          }}
+        >
+          🎨 {activeManifest.name}
         </div>
       )}
     </div>

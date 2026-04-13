@@ -143,7 +143,7 @@ export default function OfficePage() {
 
       {/* Pixel Office Canvas */}
       <div style={{ borderRadius: "var(--radius-lg)", overflow: "hidden", border: "1px solid var(--border)" }}>
-        <PixelOffice agents={officeAgents} width={900} height={500} />
+        <PixelOffice agents={officeAgents} />
       </div>
 
       {/* Bottom panel: Tenants + Legend */}
