@@ -20,31 +20,53 @@ interface LayerInfo {
 const CANVAS_W = 1280;
 const CANVAS_H = 720;
 
-// Z-order: furthest back → closest to camera
-// Based on actual content bounds analysis (x, y = pixel position in 1280x720):
-// Back wall (high y) → Mid ground → Foreground floor (low y)
-// Z-order: furthest back → closest to camera (later in list = drawn last = in front)
-// Verified against layer-coords.json psd_bbox: 机柜→沙发→椅子→标识→LOGO
-const LAYER_FILES: [string, string][] = [
-  ["room-bg", "room-bg.png"],                          // 1. 背景
-  ["办公区", "layer-办公区.png"],                      // 2. 办公区
-  ["墙左", "layer-墙左.png"],                          // 3. 左墙
-  ["墙右", "layer-墙右.png"],                          // 4. 右墙
-  ["灯", "layer-灯.png"],                              // 5. 灯
-  ["卫生间", "layer-卫生间.png"],                       // 6. 卫生间
-  ["显示状态的机器", "layer-显示状态的机器.png"],        // 7. 显示状态机器
-  ["电视", "layer-电视.png"],                          // 8. 电视
-  ["微波炉", "layer-微波炉.png"],                      // 9. 微波炉
-  ["取暖器", "layer-取暖器.png"],                     // 10. 取暖器
-  ["跑步机", "layer-跑步机.png"],                     // 11. 跑步机
-  ["床", "layer-床.png"],                              // 12. 床
-  ["饮水机", "layer-饮水机.png"],                      // 13. 饮水机
-  ["沙发地毯", "layer-沙发地毯.png"],                  // 14. 沙发地毯
-  ["机柜", "layer-机柜.png"],                          // 15. 机柜
-  ["电脑椅子", "layer-电脑椅子.png"],                  // 16. 电脑椅子
-  ["龙虾角色", "layer-龙虾角色.png"],                  // 17. 龙虾
-  ["小家标识", "layer-小家标识.png"],                  // 18. 小家标识
-  ["LOGO文字", "layer-LOGO文字.png"],                  // 19. LOGO文字
+// ═══════════════════════════════════════════════════════════════
+// Character Slot Definitions
+// 3 fixed positions where characters can appear.
+// Each slot has a sprite that can be swapped per agent state.
+// ═══════════════════════════════════════════════════════════════
+interface CharacterSlot {
+  id: string;
+  label: string;
+  // Key in layer-coords.json for position/size
+  coordsKey: string;
+  // Default sprite filename (can be swapped per state)
+  sprites: Record<string, string>;
+  // Layers that must be drawn IN FRONT of the character (occlusion)
+  foregroundLayers: string[];
+}
+
+const CHARACTER_SLOTS: CharacterSlot[] = [
+  {
+    id: "sofa",
+    label: "沙发",
+    coordsKey: "龙虾角色",
+    sprites: {
+      idle: "layer-龙虾角色.png",
+      busy: "layer-龙虾角色.png",       // future: unique sprite per state
+      thinking: "layer-龙虾角色.png",
+      offline: "layer-龙虾角色.png",
+    },
+    foregroundLayers: [],  // nothing occludes sofa character
+  },
+  {
+    id: "office",
+    label: "办公区",
+    coordsKey: "龙虾角色-office",       // future coords entry
+    sprites: {
+      idle: "layer-龙虾角色.png",       // future: char-lobster-office.png
+    },
+    foregroundLayers: ["电脑椅子"],      // chair drawn on top
+  },
+  {
+    id: "bed",
+    label: "床",
+    coordsKey: "龙虾角色-bed",          // future coords entry
+    sprites: {
+      idle: "layer-龙虾角色.png",       // future: char-lobster-bed.png
+    },
+    foregroundLayers: [],
+  },
 ];
 
 const STATUS_COLORS: Record<string, string> = {
@@ -57,6 +79,7 @@ const STATUS_COLORS: Record<string, string> = {
 interface Props {
   agents?: Agent[];
   onAgentClick?: (agent: Agent) => void;
+  darkBg?: boolean;
 }
 
 function loadImg(url: string): Promise<HTMLImageElement> {
@@ -68,11 +91,10 @@ function loadImg(url: string): Promise<HTMLImageElement> {
   });
 }
 
-export default function PixelOffice({ agents = [], onAgentClick }: Props) {
+export default function PixelOffice({ agents = [], onAgentClick, darkBg = true }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState<Record<string, LayerInfo>>({});
-  const [layerUrls, setLayerUrls] = useState<Record<string, string>>({});
   const [ready, setReady] = useState(false);
 
   const { manifest: activeManifest } = useActiveAsset();
@@ -86,33 +108,16 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
       .finally(() => setReady(true));
   }, []);
 
-  // Load asset-specific files when active manifest changes
-  useEffect(() => {
-    if (!ready) return;
-    const assetId = activeManifest?.id ?? "default";
-
-    async function load() {
-      const urls: Record<string, string> = {};
-      for (const [, filename] of LAYER_FILES) {
-        if (assetId === "default") {
-          urls[filename] = `/office-assets/assets/${filename}`;
-        } else {
-          const blob = await getAssetFile(`custom/${assetId}/${filename}`);
-          urls[filename] = blob
-            ? URL.createObjectURL(blob)
-            : `/office-assets/assets/${filename}`;
-        }
-      }
-      setLayerUrls(urls);
-    }
-    load();
-  }, [activeManifest, ready]);
+  // Resolve asset URL (supports custom skin packs)
+  function assetUrl(filename: string): string {
+    return `/office-assets/assets/${filename}`;
+  }
 
   // Draw
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
-    if (!canvas || !container || !ready || Object.keys(layerUrls).length === 0) return;
+    if (!canvas || !container || !ready) return;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -126,65 +131,65 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
 
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
-    // Load background first
-    const bgUrl = layerUrls["room-bg.png"] ?? "/office-assets/assets/room-bg.png";
+    // ── 1. Background (pre-composited, all static elements, no characters) ──
     const bgImg = new Image();
-    bgImg.onload = () => {
+    bgImg.onload = async () => {
       ctx.drawImage(bgImg, 0, 0, CANVAS_W, CANVAS_H);
 
-      // Draw all layers sequentially in z-order
-      const layerPromises = LAYER_FILES.filter(
-        ([, fn]) => fn !== "room-bg.png" && layerUrls[fn]
-      ).map(async ([key, fn]) => {
-        const img = await loadImg(layerUrls[fn]);
-        const info = coords[key];
-        if (!info) return;
-        const [cx, cy] = info.canvas_center;
-        const [iw, ih] = info.canvas_size;
-        ctx.drawImage(img, cx - iw / 2, cy - ih / 2, iw, ih);
-      });
+      // ── 2. Character slots ──
+      // Currently only slot[0] (sofa) is active with the lobster
+      const slot = CHARACTER_SLOTS[0]; // sofa slot
+      const agent = agents[0];
+      const agentStatus = agent?.status || "idle";
+      const spriteFile = slot.sprites[agentStatus] || slot.sprites.idle;
+      const charInfo = coords[slot.coordsKey];
 
-      Promise.all(layerPromises).then(() => {
-        if (!agents[0]) return;
-        const ag = agents[0];
+      if (charInfo && spriteFile) {
+        const charImg = await loadImg(assetUrl(spriteFile));
+        if (charImg.naturalWidth) {
+          const [cx, cy] = charInfo.canvas_center;
+          const [iw, ih] = charInfo.canvas_size;
+          ctx.drawImage(charImg, cx - iw / 2, cy - ih / 2, iw, ih);
+        }
+      }
 
-        // Status badge for the agent
-        const charInfo = coords["龙虾角色"];
-        if (!charInfo) return;
+      // ── 3. Agent name badge ──
+      if (agent && charInfo) {
         const [ccx, ccy] = charInfo.canvas_center;
-        const [cw, ch] = charInfo.canvas_size;
-        const tagX = ccx - cw / 2 - 20;
+        const [, ch] = charInfo.canvas_size;
+        const tagX = ccx;
         const tagY = ccy - ch / 2 - 30;
-        const name = ag.name;
+        const name = agent.name;
+
         ctx.font = "bold 13px monospace";
         const tw = ctx.measureText(name).width;
-        ctx.fillStyle = "rgba(0,0,0,0.75)";
-        ctx.fillRect(tagX, tagY, tw + 16, 20);
-        ctx.strokeStyle = ag.color;
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(tagX, tagY, tw + 16, 20);
-        ctx.fillStyle = "#fff";
-        ctx.textAlign = "center";
-        ctx.fillText(name, tagX + tw / 2 + 8, tagY + 14);
+        const badgeW = tw + 24;
+        const badgeH = 20;
 
-        // Status dot
-        const sc = STATUS_COLORS[ag.status || "offline"];
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
         ctx.beginPath();
-        ctx.arc(tagX + tw + 16 + 8, tagY + 10, 5, 0, Math.PI * 2);
-        ctx.fillStyle = sc;
+        ctx.roundRect(tagX - badgeW / 2, tagY, badgeW, badgeH, 4);
         ctx.fill();
-        ctx.strokeStyle = "#000";
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = agent.color || "#00d4aa";
+        ctx.lineWidth = 1.5;
         ctx.stroke();
 
-        if (ag.status === "offline") {
-          ctx.globalAlpha = 0.35;
-        }
-      });
+        // Status dot
+        const sc = STATUS_COLORS[agent.status || "offline"] || STATUS_COLORS.offline;
+        ctx.beginPath();
+        ctx.arc(tagX - badgeW / 2 + 10, tagY + badgeH / 2, 4, 0, Math.PI * 2);
+        ctx.fillStyle = sc;
+        ctx.fill();
+
+        // Name
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "left";
+        ctx.fillText(name, tagX - badgeW / 2 + 20, tagY + badgeH / 2 + 4);
+      }
     };
     bgImg.onerror = () => {};
-    bgImg.src = bgUrl;
-  }, [layerUrls, coords, agents, ready]);
+    bgImg.src = assetUrl("room-bg.png");
+  }, [coords, agents, ready, darkBg]);
 
   return (
     <div
@@ -194,7 +199,7 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
         width: "100%",
         borderRadius: "var(--radius-lg, 12px)",
         overflow: "hidden",
-        background: "#0a0a14",
+        background: darkBg ? "#0a0a14" : "#f0f0f0",
         lineHeight: 0,
       }}
     >
@@ -203,7 +208,7 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
         style={{
           display: "block",
           width: "100%",
-          imageRendering: "pixelated",
+          imageRendering: "auto",
           cursor: agents[0] ? "pointer" : "default",
         }}
         onClick={() => {
@@ -241,7 +246,7 @@ export default function PixelOffice({ agents = [], onAgentClick }: Props) {
             color: "#FF385C",
           }}
         >
-          🎨 {activeManifest.name}
+          {activeManifest.name}
         </div>
       )}
     </div>

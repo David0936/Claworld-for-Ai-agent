@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import PixelOffice from "@/components/PixelOffice";
 import Link from "next/link";
-import { Users, ShoppingBag, Copy, Check } from "lucide-react";
+import { Users, ShoppingBag, Copy, Check, Sun, Moon } from "lucide-react";
 
 interface Agent {
   id: string;
@@ -16,24 +16,28 @@ interface Agent {
 
 const SHOP_URL = process.env.NEXT_PUBLIC_SHOP_URL || "https://shop.claworld.ai";
 
+const FALLBACK_AGENTS: Agent[] = [
+  { id: "empty-1", name: "—", status: "offline" as const, color: "#333" },
+  { id: "empty-2", name: "—", status: "offline" as const, color: "#333" },
+  { id: "empty-3", name: "—", status: "offline" as const, color: "#333" },
+  { id: "empty-4", name: "—", status: "offline" as const, color: "#333" },
+];
+
 export default function OfficePage() {
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [loading, setLoading] = useState(true);
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [darkBg, setDarkBg] = useState(true);
 
+  // Load APIs in background — don't block rendering
   useEffect(() => {
-    Promise.all([
-      fetch("/api/agents").then((r) => r.json()).catch(() => ({ agents: [] })),
-      fetch("/api/tenants").then((r) => r.json()).catch(() => ({ tenants: [] })),
-    ]).then(([agentData, tenantData]) => {
-      setAgents(agentData.agents || []);
-      // Get first room's invite code
-      if (tenantData.tenants?.length > 0) {
-        setInviteCode(tenantData.tenants[0].inviteCode);
-      }
-      setLoading(false);
-    });
+    fetch("/api/agents").then((r) => r.json()).then((data) => {
+      if (data.agents?.length) setAgents(data.agents);
+    }).catch(() => {});
+
+    fetch("/api/tenants").then((r) => r.json()).then((data) => {
+      if (data.tenants?.length > 0) setInviteCode(data.tenants[0].inviteCode);
+    }).catch(() => {});
   }, []);
 
   function copyInvite() {
@@ -44,20 +48,7 @@ export default function OfficePage() {
     });
   }
 
-  if (loading) {
-    return (
-      <div style={{ color: "var(--text-muted)", padding: "40px", textAlign: "center" }}>
-        Loading office...
-      </div>
-    );
-  }
-
-  const officeAgents = agents.length > 0 ? agents : [
-    { id: "empty-1", name: "—", status: "offline" as const, color: "#333" },
-    { id: "empty-2", name: "—", status: "offline" as const, color: "#333" },
-    { id: "empty-3", name: "—", status: "offline" as const, color: "#333" },
-    { id: "empty-4", name: "—", status: "offline" as const, color: "#333" },
-  ];
+  const officeAgents = agents.length > 0 ? agents : FALLBACK_AGENTS;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -74,6 +65,20 @@ export default function OfficePage() {
 
         {/* Action buttons */}
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {/* Background toggle */}
+          <button
+            onClick={() => setDarkBg((v) => !v)}
+            title={darkBg ? "Switch to light background" : "Switch to dark background"}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: 34, height: 34, borderRadius: "var(--radius-md)",
+              border: "1px solid var(--border)", background: "var(--surface)",
+              color: "var(--text-secondary)", cursor: "pointer",
+            }}
+          >
+            {darkBg ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+
           {/* Invite Friends */}
           {inviteCode ? (
             <button
@@ -143,7 +148,7 @@ export default function OfficePage() {
 
       {/* Pixel Office Canvas */}
       <div style={{ borderRadius: "var(--radius-lg)", overflow: "hidden", border: "1px solid var(--border)" }}>
-        <PixelOffice agents={officeAgents} />
+        <PixelOffice agents={officeAgents} darkBg={darkBg} />
       </div>
 
       {/* Bottom panel: Tenants + Legend */}
