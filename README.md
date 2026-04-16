@@ -1,122 +1,124 @@
+🌐 Language: English | [中文](README.zh.md)
+
 # 🏢 Claworld Desktop
 
-**本地 AI Agent 状态看板** — 用像素风办公室看板实时可视化你的 AI 助手在做什么。
+**Local AI Agent Visualization Dashboard** — See your AI assistant working in real-time through a pixel-art office scene.
 
 ![Pixel Office](public/office-assets/assets/showcase-preview.webp)
 
-与 [OpenClaw](https://github.com/openclaw/openclaw) 深度集成，在本地 Mac 上运行，随时打开就能看到 AI 的工作状态。
+Deeply integrated with [OpenClaw](https://github.com/openclaw/openclaw). Runs locally on macOS. Open the dashboard anytime to see what your AI is doing.
 
 ---
 
-## ✨ 功能一览
+## ✨ Features
 
-- 🖼️ **像素办公室** — 3 个角色槽位（沙发 / 办公桌 / 床），AI 在哪、做什么，实时渲染
-- 💻 **Sessions** — 查看和管理 AI 会话
-- ⏰ **Cron** — 定时任务管理
-- 🧩 **Skills** — 浏览已安装的 Agent 技能
-- 📁 **Files** — 浏览器端文件系统
-- 🧠 **Memory** — 查询长期记忆
-- 🔁 **Git** — Git 状态与操作
-- 📅 **Calendar** — 日历与日程
-- 💰 **Costs** — 用量与成本分析
-- ⚙️ **Settings** — 配置项一站式管理
-- 🏪 **Shop** — 直达 Claworld 商城
+- 🖼️ **Pixel Office** — 3 character slots (Sofa / Desk / Bed), AI position and status rendered live
+- 💻 **Sessions** — View and manage active AI agent sessions
+- ⏰ **Cron** — Schedule and monitor background tasks
+- 🧩 **Skills** — Browse installed agent capabilities
+- 📁 **Files** — Navigate workspace files from the browser
+- 🧠 **Memory** — Query long-term agent memory
+- 🔁 **Git** — Git status and operations
+- 📅 **Calendar** — Calendar and event management
+- 💰 **Costs** — Usage and cost analysis
+- ⚙️ **Settings** — Unified configuration panel
+- 🏪 **Shop** — Direct link to Claworld Asset Store
 
 ---
 
-## 🛠 安装
+## 🛠 Setup
 
-**环境要求：** macOS，Node.js 18+
+**Requirements:** macOS, Node.js 18+
 
 ```bash
-# 克隆仓库
+# Clone the repo
 git clone https://github.com/David0936/Claworld-for-Ai-agent.git
 cd Claworld-for-Ai-agent
 
-# 安装依赖
+# Install dependencies
 npm install
 
-# 配置环境变量
+# Configure environment
 cp .env.example .env.local
-# 编辑 .env.local，填入你的 OpenClaw 配置
+# Edit .env.local with your OpenClaw setup
 
-# 启动开发服务器
+# Start dev server
 npm run dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)
+Open [http://localhost:3000](http://localhost:3000)
 
 ---
 
-## 📐 架构说明
+## 📐 Architecture
 
-### 技术栈
+### Tech Stack
 
-| 层级 | 技术 |
-|------|------|
-| 前端框架 | Next.js 15 + TypeScript |
-| UI 风格 | 像素风深色主题 + Airbnb 设计系统 |
-| 数据持久化 | SQLite（Activity 日志） |
-| 美术资源 | PNG/WebP 分层素材 + localStorage 资产注册表 |
-| Agent 集成 | OpenClaw REST API |
+| Layer | Technology |
+|-------|------------|
+| Frontend | Next.js 15 + TypeScript |
+| UI Style | Pixel art dark theme + Airbnb design system |
+| Persistence | SQLite (Activity logs) |
+| Art Assets | PNG/WebP layered sprites + localStorage asset registry |
+| Agent Integration | OpenClaw REST API |
 
-### 核心模块
+### Module Structure
 
 ```
 src/
-├── app/(dashboard)/          # 路由页面
-│   ├── page.tsx             # 首页仪表盘
-│   ├── office/               # 像素办公室
-│   ├── sessions/            # 会话管理
-│   ├── cron/                # 定时任务
-│   ├── skills/              # 技能浏览器
-│   ├── files/               # 文件管理
-│   ├── memory/              # 记忆查询
-│   ├── git/                 # Git 操作
-│   ├── calendar/            # 日历
-│   ├── costs/               # 成本分析
-│   ├── settings/           # 设置
-│   └── shop/                # 商城入口
-├── components/              # 公共组件
-│   └── PixelOffice/         # 像素办公室渲染器
-├── hooks/                   # React Hooks
-│   ├── useAssetRegistry.ts  # 资产注册表 CRUD
-│   └── useActiveAsset.ts    # 当前激活资产
-└── lib/                     # 工具函数
-    ├── asset-registry.ts    # 资产注册表操作
-    ├── manifest-parser.ts   # manifest.json 解析
-    └── activities-db.ts     # SQLite 活动日志
+├── app/(dashboard)/          # Route pages
+│   ├── page.tsx             # Dashboard home
+│   ├── office/              # Pixel office
+│   ├── sessions/            # Session management
+│   ├── cron/                # Cron jobs
+│   ├── skills/              # Skills browser
+│   ├── files/               # File browser
+│   ├── memory/              # Memory queries
+│   ├── git/                 # Git operations
+│   ├── calendar/            # Calendar
+│   ├── costs/               # Cost analysis
+│   ├── settings/           # Settings
+│   └── shop/                # Store link
+├── components/              # Shared components
+│   └── PixelOffice/         # Pixel office renderer
+├── hooks/                   # React hooks
+│   ├── useAssetRegistry.ts  # Asset registry CRUD
+│   └── useActiveAsset.ts    # Active asset state
+└── lib/                     # Utilities
+    ├── asset-registry.ts    # Registry operations
+    ├── manifest-parser.ts   # manifest.json parser
+    └── activities-db.ts     # SQLite activity log
 ```
 
-### 像素办公室渲染原理
+### Pixel Office Rendering
 
 ```
 room-bg.webp (1280x720)
-  └── 静态背景（所有家具已合成）
-        └── [角色槽位 1-3]
-              └── 角色精灵图（按状态切换 idle/busy/thinking/offline）
-                    └── 名称角标（Agent 名 + 状态点）
+  └── Static background (all furniture composited)
+        └── [Character Slots 1-3]
+              └── Character sprite (idle/busy/thinking/offline)
+                    └── Name badge (Agent name + status dot)
 ```
 
-- **3 个角色槽位：** 沙发（休息）、办公桌（工作）、床（离线）
-- **美术素材** 在 `public/office-assets/`（含 room-bg、角色精灵、坐标数据）
-- **资产注册表** 用 localStorage 管理，支持安装/激活/卸载资产包
+- **3 Character Slots:** Sofa (idle), Desk (working), Bed (offline)
+- **Assets** in `public/office-assets/` (room background, character sprites, coordinate data)
+- **Asset Registry** manages install/activate/uninstall via localStorage
 
 ---
 
-## 🎨 美术资产
+## 🎨 Art Assets
 
-**美术资产不在 MIT 许可证范围内，单独授权。**
+**Art assets are NOT covered by the MIT license and are separately licensed.**
 
-`public/office-assets/` 下的所有视觉素材（背景图、角色精灵、图标等）由 **怪怪** 创作，**禁止商用**，仅限个人学习或评估使用。
+All visual assets under `public/office-assets/` (backgrounds, character sprites, icons, etc.) were created by **怪怪** and are **prohibited from commercial use**. They are licensed for personal and evaluation use only.
 
-如需商用美术资产，请联系作者获取授权，或替换为你自己的原创素材。
+For commercial licensing of art assets, please contact the author directly or replace them with your own original assets.
 
 ---
 
-## 📄 许可证
+## 📄 License
 
-### 软件代码：MIT License
+### Software Code: MIT License
 
 Copyright (c) 2026 **David Yu**
 
@@ -138,22 +140,22 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-### 美术资产：禁止商用
+### Art Assets: Non-Commercial Only
 
-美术资产（`public/office-assets/`）由 **怪怪** 创作，**非商业用途**。详情见上方「美术资产」说明。
+Art assets (`public/office-assets/`) created by **怪怪**. Commercial use is prohibited. See "Art Assets" section above for details.
 
 ---
 
-## 👤 作者
+## 👤 Author
 
 **David Yu** — [GitHub](https://github.com/David0936)
 
-- 微信：824644809
+- WeChat: 824644809
 
 ---
 
-## 🔗 相关项目
+## 🔗 Related Projects
 
-- [🏪 Claworld Shop](https://shop.claworld.ai) — AI 数字资产商城
-- [🦞 OpenClaw](https://github.com/openclaw/openclaw) — Agent 运行时
-- [🎨 claworld-lobster-king](https://github.com/David0936/claworld-lobster-king) — 像素美术资产库
+- [🏪 Claworld Shop](https://shop.claworld.ai) — AI Asset Store
+- [🦞 OpenClaw](https://github.com/openclaw/openclaw) — Agent Runtime
+- [🎨 claworld-lobster-king](https://github.com/David0936/claworld-lobster-king) — Pixel Art Asset Library
