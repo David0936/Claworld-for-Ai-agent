@@ -146,6 +146,101 @@ SOFTWARE.
 
 ---
 
+## 📖 使用指南
+
+### 邀请他人加入办公室
+
+Claworld Desktop 支持**多人办公室** — 其他 AI Agent（甚至真人）可以通过邀请码加入你的像素办公室，出现在场景中。
+
+#### 第一步：获取邀请码
+
+打开 Claworld Desktop → **Office** 标签页，首次打开会自动创建一个默认房间。复制邀请码（如 `A1B2C3D4`）分享给需要加入的人。
+
+#### 第二步：访客通过 API 加入
+
+调用加入接口，传入邀请码：
+
+```bash
+curl -X POST http://localhost:3000/api/tenants \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "join",
+    "inviteCode": "A1B2C3D4",
+    "yourName": "访客名称",
+    "color": "#FF6B6B"
+  }'
+```
+
+#### 第三步：Agent 状态同步（OpenClaw Agent）
+
+如果是 AI Agent，可以在 SOUL.md 中加入状态推送规则：
+
+```
+## Claworld Office 状态规则
+- 开始任务时：POST http://localhost:3000/api/tenants，action=update-member，status="busy"
+- 空闲时：POST http://localhost:3000/api/tenants，action=update-member，status="idle"
+- 离线时：POST http://localhost:3000/api/tenants，action=update-member，status="offline"
+```
+
+或者直接把这个 SKILL 发给 Agent：
+
+```
+请参照以下 SKILL 完成 Claworld Office 访客接入：
+https://github.com/David0936/Claworld-for-Ai-agent/blob/main/.claude/skills/office-guest.md
+```
+
+#### 状态 → 办公室槽位对照表
+
+| 状态 | 所在区域 | 场景 |
+|------|---------|------|
+| `online` | 🛋 沙发 | 待命、就绪 |
+| `busy` | 💻 办公桌 | 执行任务中 |
+| `idle` | 🛋 沙发 | 空闲休息 |
+| `offline` | 🛏 床 | 断开连接 |
+
+#### 邀请码管理
+
+- **重新生成码：** Office 页 → 设置 → 重新生成邀请码（旧码立即失效）
+- **房间上限：** 每个房间最多 8 名成员
+- **房间命名：** Office 页 → 设置 → 修改房间名称
+
+---
+
+## 🔌 API 参考
+
+### Tenants（房间管理）
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/api/tenants` | 列出所有房间 |
+| POST | `/api/tenants?action=create` | 创建新房间 |
+| POST | `/api/tenants?action=join` | 通过邀请码加入 |
+| POST | `/api/tenants?action=update` | 更新房间（名称、皮肤） |
+| POST | `/api/tenants?action=regenerate-code` | 重新生成邀请码 |
+
+### Agents
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/api/agents` | 列出所有 Agent |
+| POST | `/api/agents` | 注册新 Agent |
+
+### 其他接口
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/api/sessions` | 活跃会话列表 |
+| GET | `/api/cron` | 定时任务列表 |
+| GET | `/api/calendar` | 日历事件 |
+| GET | `/api/costs` | Token 用量与费用 |
+| GET | `/api/activities` | 活动日志 |
+| GET | `/api/files` | 文件浏览 |
+| GET | `/api/git` | Git 状态 |
+| GET | `/api/skills` | 已安装技能 |
+| GET | `/api/memory` | 记忆条目 |
+
+---
+
 ## 👤 作者
 
 **David Yu** — [GitHub](https://github.com/David0936)

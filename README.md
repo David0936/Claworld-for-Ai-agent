@@ -146,6 +146,102 @@ Art assets (`public/office-assets/`) created by **怪怪**. Commercial use is pr
 
 ---
 
+## 📖 Usage Guide
+
+### Inviting Others to Your Office
+
+Claworld Desktop supports a **multi-agent office** — other agents (or even humans) can join your pixel office and appear as characters in the scene.
+
+#### Step 1: Get Your Invite Code
+
+Open the **Office** tab in Claworld Desktop. A default room is auto-created on first load. Copy the invite code (e.g. `A1B2C3D4`) and share it.
+
+#### Step 2: Guests Join via API
+
+Guests call the join endpoint with the invite code:
+
+```bash
+curl -X POST http://localhost:3000/api/tenants \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "join",
+    "inviteCode": "A1B2C3D4",
+    "yourName": "Guest Agent Name",
+    "color": "#FF6B6B"
+  }'
+```
+
+#### Step 3: Agent Status Sync (for OpenClaw agents)
+
+Add this to the guest agent's SOUL.md so they auto-push status:
+
+```
+## Claworld Office Status Rules
+- On task start:  POST http://localhost:3000/api/tenants with action=update-member, status="busy"
+- When idle:      POST http://localhost:3000/api/tenants with action=update-member, status="idle"
+- On disconnect:  POST http://localhost:3000/api/tenants with action=update-member, status="offline"
+```
+
+Or use the **SKILL** — paste this to your agent:
+
+```
+Please use the SKILL at:
+https://github.com/David0936/Claworld-for-Ai-agent/blob/main/.claude/skills/office-guest.md
+to set up Claworld Office guest integration.
+```
+
+#### Status → Office Slot Mapping
+
+| Status | Office Area | Scenario |
+|--------|-------------|----------|
+| `online` | 🛋 Sofa | Idle, ready |
+| `busy` | 💻 Desk | Working |
+| `idle` | 🛋 Sofa | Resting |
+| `offline` | 🛏 Bed | Disconnected |
+
+#### Invite Code Management
+
+- **Regenerate code:** Office page → Settings → Regenerate Invite Code (invalidates old code)
+- **Max members:** 8 per room
+- **Room naming:** Office page → Settings → Rename Room
+
+---
+
+## 🔌 API Reference
+
+### Tenants (Room Management)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/tenants` | List all rooms |
+| POST | `/api/tenants?action=create` | Create a new room |
+| POST | `/api/tenants?action=join` | Join by invite code |
+| POST | `/api/tenants?action=update` | Update room (name, skin) |
+| POST | `/api/tenants?action=regenerate-code` | Regenerate invite code |
+
+### Agents
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/agents` | List all agents |
+| POST | `/api/agents` | Register a new agent |
+
+### Other Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/sessions` | List active sessions |
+| GET | `/api/cron` | List cron jobs |
+| GET | `/api/calendar` | Calendar events |
+| GET | `/api/costs` | Token usage & costs |
+| GET | `/api/activities` | Activity log |
+| GET | `/api/files` | File browser |
+| GET | `/api/git` | Git status |
+| GET | `/api/skills` | Installed skills |
+| GET | `/api/memory` | Memory entries |
+
+---
+
 ## 👤 Author
 
 **David Yu** — [GitHub](https://github.com/David0936)
