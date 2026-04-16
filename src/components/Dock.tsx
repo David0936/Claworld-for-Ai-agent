@@ -25,13 +25,16 @@ import {
   Package,
   Users,
   X,
+  Map,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useI18n } from "@/i18n/context";
+import { ChatButton } from "@/components/ChatButton";
 
 const NAV_ITEMS = [
   { href: "/", labelKey: "首页", labelKeyEn: "Dashboard", icon: LayoutDashboard },
   { href: "/office", labelKey: "办公室", labelKeyEn: "Office", icon: LayoutGrid },
+  { href: "/valley", labelKey: "像素山谷", labelKeyEn: "Valley", icon: Map },
   { href: "/library", labelKey: "资产库", labelKeyEn: "Library", icon: Package },
   { href: "/shop", labelKey: "商城", labelKeyEn: "Shop", icon: ShoppingBag },
   { href: "/tenants", labelKey: "房客", labelKeyEn: "Tenants", icon: Users },
@@ -49,7 +52,11 @@ const NAV_ITEMS = [
   { href: "/settings", labelKey: "设置", labelKeyEn: "Settings", icon: Settings },
 ];
 
-export function Dock() {
+interface DockProps {
+  onChatToggle?: () => void;
+}
+
+export function Dock({ onChatToggle }: DockProps) {
   const pathname = usePathname();
   const { lang, availableLangs } = useI18n();
   const isMobile = useIsMobile();
@@ -115,6 +122,34 @@ export function Dock() {
 
         {!isMobile && (
           <div style={{ height: "1px", backgroundColor: "var(--border)", marginBottom: "8px" }} />
+        )}
+
+        {/* Chat Button */}
+        {!isMobile && (
+          <div style={{ marginBottom: "4px" }}>
+            <ChatButton onClick={onChatToggle || (() => {})} />
+          </div>
+        )}
+
+        {/* Mobile Chat Button */}
+        {isMobile && (
+          <button
+            onClick={onChatToggle || (() => {})}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "52px",
+              height: "40px",
+              borderRadius: "var(--radius-md)",
+              background: "var(--accent-soft)",
+              color: "var(--accent)",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            <MessageSquare size={16} />
+          </button>
         )}
 
         {NAV_ITEMS.map((item) => {

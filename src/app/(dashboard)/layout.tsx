@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { Dock } from "@/components/Dock";
 import { TopBar } from "@/components/TopBar";
 import { StatusBar } from "@/components/StatusBar";
+import { ChatPanel } from "@/components/chat/ChatPanel";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
 export default function DashboardLayout({
@@ -11,10 +13,11 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const isMobile = useIsMobile();
+  const [chatOpen, setChatOpen] = useState(false);
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
-      <Dock />
+      <Dock onChatToggle={() => setChatOpen((v) => !v)} />
       <div
         style={{
           marginLeft: isMobile ? 0 : "200px",
@@ -36,6 +39,7 @@ export default function DashboardLayout({
         </main>
       </div>
       <StatusBar />
+      <ChatPanel isOpen={chatOpen} onClose={() => setChatOpen(false)} />
     </div>
   );
 }
