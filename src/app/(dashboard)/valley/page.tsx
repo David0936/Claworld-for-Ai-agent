@@ -1,51 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 
-const VALLEY_ASSETS = "/valley-assets";
+const LOBSTER_URL = "/office-assets/assets";
 
-// Map: 5504×3072 px → viewport 1280×720
-// Show the office area (bottom-right of map)
-const MAP_W = 5504;
-const MAP_H = 3072;
+// Office scene: use the room background (1280x720)
 const VIEW_W = 1280;
 const VIEW_H = 720;
-const CAM_X = 4912;
-const CAM_Y = 2176;
-const SCALE = Math.min(VIEW_W / (MAP_W - CAM_X), VIEW_H / (MAP_H - CAM_Y));
 
-function mapToScreen(mx: number, my: number) {
-  return {
-    x: (mx - CAM_X) * SCALE,
-    y: (my - CAM_Y) * SCALE,
-  };
-}
-
-// NPC office slot positions (in map pixel coords)
-// 3 cols × 5 rows grid, starting at tile (161, 78)
-function getSlotPositions() {
-  const positions = [];
-  const TILE = 32;
-  const startCol = 161;
-  const startRow = 78;
-  const charW = 32;
-  const charH = 64;
-  for (let r = 0; r < 5; r++) {
-    for (let c = 0; c < 3; c++) {
-      const tileX = (startCol + c) * TILE + TILE / 2;
-      const tileY = (startRow + r) * TILE;
-      positions.push({
-        x: tileX - charW / 2,
-        y: tileY - charH,
-        cx: tileX,
-        cy: tileY - charH / 2,
-      });
-    }
-  }
-  return positions;
-}
-
-const SLOT_POSITIONS = getSlotPositions();
+// Character slot positions in the office scene (canvas coordinates)
+// These match the PSD layer-coords.json positions from claworld-lobster-king
+const OFFICE_SLOTS = [
+  // Slot 1: Sofa area (沙发出租)
+  { id: "slot-1", cx: 548, cy: 479, label: "沙发", charH: 150, charW: 188 },
+  // Slot 2: Office/desk area
+  { id: "slot-2", cx: 245, cy: 212, label: "办公桌", charH: 150, charW: 188 },
+  // Slot 3: Bed area
+  { id: "slot-3", cx: 1074, cy: 509, label: "床", charH: 150, charW: 188 },
+];
 
 interface Agent {
   id: string;
@@ -55,197 +27,209 @@ interface Agent {
   color: string;
 }
 
-// Frame animation: sprite sheet is 32×64 per frame, arranged horizontally
-// 24 frames total → front-facing row starts at frame 18
-const FRAME_W = 32;
-const FRAME_H = 64;
-const FRAMES_PER_ANIM = 6;
-const FRONT_ROW_START = 18;
-
-type AnimName = "idle" | "busy" | "thinking" | "offline";
-
-const ANIM_CONFIG: Record<AnimName, { row: number; fps: number }> = {
-  idle: { row: FRONT_ROW_START, fps: 8 },
-  busy: { row: FRONT_ROW_START, fps: 6 },
-  thinking: { row: FRONT_ROW_START, fps: 4 },
-  offline: { row: FRONT_ROW_START, fps: 0 },
+const STATUS_COLORS: Record<string, string> = {
+  online: "#00ff88",
+  busy: "#ff6b6b",
+  idle: "#ffd93d",
+  offline: "#555555",
 };
+
+const STATUS_LABELS: Record<string, string> = {
+  online: "在线",
+  busy: "忙碌",
+  idle: "空闲",
+  offline: "离线",
+};
+
+// Status → position in office
+function slotForStatus(status: string, index: number): number {
+  if (status === "offline") return 2; // bed
+  if (status === "busy") return 1;   // desk
+  return 0;                            // sofa (idle/online)
+}
 
 class ValleyRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private bgImg: HTMLImageElement | null = null;
-  private spriteImg: HTMLImageElement | null = null;
-  private agents: (Agent | null)[] = [null, null, null, null, null];
-  private animFrames: Map<string, number> = new Map(); // agentId → frame
-  private lastTime = 0;
+  private lobsterImg: HTMLImageElement | null = null;
+  private agents: (Agent | null)[] = [null, null, null];
+  private time = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    const ctx = canvas.getContext("2d")!;
-    ctx.imageSmoothingEnabled = false;
-    this.ctx = ctx;
+    this.ctx = canvas.getContext("2d")!;
+    this.ctx.imageSmoothingEnabled = false;
 
     // Load assets
-    this.loadBg().catch(() => {});
-    this.loadSprite("idle").catch(() => {});
+    this.loadBg();
+    this.loadLobster();
 
-    // Init frames
-    for (let i = 0; i < 5; i++) {
-      this.animFrames.set(`slot-${i}`, 0);
-    }
-
-    // Start loop
     requestAnimationFrame((t) => this.loop(t));
   }
 
-  private async loadBg(): Promise<void> {
+  private async loadBg() {
+    // Try room-bg first (1280x720), fallback to scene-bg
+    const urls = ["/office-assets/assets/room-bg.png", "/office-assets/assets/scene-bg.webp", "/office-assets/assets/room-bg.webp"];
+    for (const url of urls) {
+      try {
+        const img = await this.loadImage(url);
+        if (img.width > 0) { this.bgImg = img; break; }
+      } catch {}
+    }
+  }
+
+  private async loadLobster(): Promise<void> {
     return new Promise((resolve) => {
       const img = new Image();
-      img.onload = () => { this.bgImg = img; resolve(); };
+      img.crossOrigin = "anonymous";
+      img.onload = () => { this.lobsterImg = img; resolve(); };
       img.onerror = () => resolve();
-      img.src = `${VALLEY_ASSETS}/Map1.png`;
+      img.src = `${LOBSTER_URL}/char-lobster.png`;
     });
   }
 
-  private async loadSprite(anim: AnimName): Promise<void> {
-    return new Promise((resolve) => {
+  private loadImage(src: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
       const img = new Image();
-      img.onload = () => { this.spriteImg = img; resolve(); };
-      img.onerror = () => resolve();
-      const file = anim === "busy" ? "Adam_phone_32x32.png" : "Adam_idle_anim_32x32.png";
-      img.src = `${VALLEY_ASSETS}/${file}`;
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
     });
   }
 
-  setAgent(slot: number, agent: Agent | null) {
-    this.agents[slot] = agent;
-    if (agent) {
-      const file = agent.status === "busy" ? "Adam_phone_32x32.png" : "Adam_idle_anim_32x32.png";
-      this.loadSprite(agent.status as AnimName).catch(() => {});
+  setAgents(agentList: Agent[]) {
+    // Map agents to slots based on their status
+    this.agents = [null, null, null];
+    for (const agent of agentList.slice(0, 3)) {
+      const slotIdx = slotForStatus(agent.status, 0);
+      if (!this.agents[slotIdx]) {
+        this.agents[slotIdx] = agent;
+      } else {
+        // Slot taken, find first empty
+        for (let i = 0; i < 3; i++) {
+          if (!this.agents[i]) { this.agents[i] = agent; break; }
+        }
+      }
     }
   }
 
   private loop(time: number) {
-    const dt = time - this.lastTime;
-    this.lastTime = time;
-
-    this.draw(dt);
+    this.time = time;
+    this.draw();
     requestAnimationFrame((t) => this.loop(t));
   }
 
-  private draw(_dt: number) {
+  private draw() {
     const { ctx, canvas } = this;
     const W = canvas.width;
     const H = canvas.height;
 
-    // Clear
+    // Background
     ctx.fillStyle = "#0a0a14";
     ctx.fillRect(0, 0, W, H);
 
-    // Background
     if (this.bgImg) {
-      ctx.save();
-      ctx.translate(-CAM_X * SCALE, -CAM_Y * SCALE);
-      ctx.scale(SCALE, SCALE);
-      ctx.globalAlpha = 0.6;
-      ctx.drawImage(this.bgImg, 0, 0, MAP_W, MAP_H);
-      ctx.restore();
+      ctx.drawImage(this.bgImg, 0, 0, W, H);
     }
 
-    // Camera border indicator
-    ctx.strokeStyle = "rgba(0,212,170,0.3)";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(0, 0, W, H);
-
-    // Characters
-    for (let i = 0; i < Math.min(4, SLOT_POSITIONS.length); i++) {
-      this.drawCharacter(i);
+    // Draw agents at their slots
+    for (let i = 0; i < OFFICE_SLOTS.length; i++) {
+      this.drawAgent(i);
     }
   }
 
-  private drawCharacter(slot: number) {
-    const agent = this.agents[slot];
-    const pos = SLOT_POSITIONS[slot];
-    const screen = mapToScreen(pos.x, pos.y);
-    const animName: AnimName = (agent?.status as AnimName) ?? "offline";
-    const config = ANIM_CONFIG[animName];
+  private drawAgent(slotIdx: number) {
+    const slot = OFFICE_SLOTS[slotIdx];
+    const agent = this.agents[slotIdx];
+    const { ctx } = this;
 
-    const frameKey = `slot-${slot}`;
-    let frame = this.animFrames.get(frameKey) ?? 0;
+    if (!agent) return;
 
-    // Advance frame
-    if (config.fps > 0) {
-      const fps = config.fps;
-      const framesInRow = FRAMES_PER_ANIM;
-      frame = Math.floor(frame) % framesInRow;
-      this.animFrames.set(frameKey, (frame + 1) % framesInRow);
-    }
+    const { cx, cy, charW, charH } = slot;
+    const status = agent.status;
+    const color = STATUS_COLORS[status] ?? STATUS_COLORS.offline;
 
-    const sx = (config.row + frame) * FRAME_W;
-    const sy = 0;
+    // Pulse animation
+    const pulse = status === "busy" ? Math.sin(this.time / 300) * 0.3 + 0.7 : 1;
 
-    const dw = FRAME_W * SCALE;
-    const dh = FRAME_H * SCALE;
-    const dx = screen.x;
-    const dy = screen.y;
+    // Draw character
+    if (this.lobsterImg) {
+      // Bob up/down slightly for busy
+      const bob = status === "busy" ? Math.sin(this.time / 400) * 3 : 0;
+      const dw = charW;
+      const dh = charH;
+      const dx = cx - dw / 2;
+      const dy = cy - dh + bob;
 
-    // Draw sprite
-    if (this.spriteImg && agent) {
-      this.ctx.drawImage(this.spriteImg, sx, sy, FRAME_W, FRAME_H, dx, dy, dw, dh);
-    } else if (agent) {
-      // Placeholder: colored box
-      this.ctx.fillStyle = agent.color + "88";
-      this.ctx.fillRect(dx, dy, dw, dh);
-      this.ctx.strokeStyle = agent.color;
-      this.ctx.lineWidth = 1;
-      this.ctx.strokeRect(dx, dy, dw, dh);
+      ctx.save();
+      // Glow for active agents
+      if (status !== "offline") {
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 12 * pulse;
+      }
+      ctx.drawImage(this.lobsterImg, dx, dy, dw, dh);
+      ctx.restore();
+    } else {
+      // Fallback placeholder
+      ctx.fillStyle = color + "88";
+      ctx.fillRect(cx - charW / 2, cy - charH, charW, charH);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(cx - charW / 2, cy - charH, charW, charH);
     }
 
     // Name badge
-    if (agent) {
-      this.drawNameBadge(screen.x + dw / 2, dy, agent);
-    }
+    this.drawBadge(cx, cy - charH - 20, agent, pulse);
   }
 
-  private drawNameBadge(cx: number, y: number, agent: Agent) {
+  private drawBadge(cx: number, y: number, agent: Agent, pulse: number) {
     const { ctx } = this;
-    const name = agent.name || "Unknown";
-    ctx.font = `bold ${Math.round(11 * SCALE)}px monospace`;
+    const name = agent.name;
+    const status = agent.status;
+    const color = STATUS_COLORS[status] ?? STATUS_COLORS.offline;
+
+    ctx.font = "bold 12px monospace";
     const tw = ctx.measureText(name).width;
-    const pad = 4 * SCALE;
-    const dotR = 3 * SCALE;
-    const bw = tw + pad * 2 + dotR * 2 + 2 * SCALE;
-    const bh = Math.round(14 * SCALE);
+    const pad = 6;
+    const dotR = 4;
+    const bw = tw + pad * 2 + dotR * 2 + 4;
+    const bh = 18;
     const bx = cx - bw / 2;
-    const by = y - bh - 2 * SCALE;
+    const by = y;
 
     // Badge bg
-    ctx.fillStyle = "rgba(0,0,0,0.75)";
-    ctx.beginPath();
-    this.roundRect(ctx, bx, by, bw, bh, 3 * SCALE);
+    ctx.fillStyle = "rgba(0,0,0,0.8)";
+    this.roundRect(ctx, bx, by, bw, bh, 4);
     ctx.fill();
 
     // Badge border
-    ctx.strokeStyle = agent.color;
-    ctx.lineWidth = 1.5 * SCALE;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = pulse;
     ctx.stroke();
+    ctx.globalAlpha = 1;
 
-    // Status dot
-    const dotColor = { online: "#00ff88", busy: "#ff6b6b", idle: "#ffd93d", offline: "#555555" }[agent.status] ?? "#555";
+    // Status dot (pulsing glow)
     ctx.beginPath();
     ctx.arc(bx + pad + dotR, by + bh / 2, dotR, 0, Math.PI * 2);
-    ctx.fillStyle = dotColor;
+    ctx.fillStyle = color;
+    if (status !== "offline") {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8 * pulse;
+    }
     ctx.fill();
+    ctx.shadowBlur = 0;
 
     // Name text
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(name, bx + pad + dotR * 2 + 2 * SCALE, by + bh / 2);
+    ctx.fillText(name, bx + pad + dotR * 2 + 4, by + bh / 2);
   }
 
   private roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+    ctx.beginPath();
     ctx.moveTo(x + r, y);
     ctx.lineTo(x + w - r, y);
     ctx.quadraticCurveTo(x + w, y, x + w, y + r);
@@ -258,9 +242,7 @@ class ValleyRenderer {
     ctx.closePath();
   }
 
-  destroy() {
-    // cleanup if needed
-  }
+  destroy() {}
 }
 
 export default function ValleyPage() {
@@ -268,8 +250,8 @@ export default function ValleyPage() {
   const rendererRef = useRef<ValleyRenderer | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [bgUrl, setBgUrl] = useState<string>("");
 
-  // Init renderer
   useEffect(() => {
     if (!canvasRef.current) return;
     const canvas = canvasRef.current;
@@ -279,36 +261,40 @@ export default function ValleyPage() {
     canvas.style.height = `${VIEW_H}px`;
     canvas.style.imageRendering = "pixelated";
 
-    const ctx = canvas.getContext("2d")!;
-    ctx.imageSmoothingEnabled = false;
-
     rendererRef.current = new ValleyRenderer(canvas);
 
+    // Detect available background
+    const tryBg = async () => {
+      for (const url of ["/office-assets/assets/room-bg.png", "/office-assets/assets/scene-bg.webp"]) {
+        try {
+          const r = await fetch(url, { method: "HEAD" });
+          if (r.ok) { setBgUrl(url); break; }
+        } catch {}
+      }
+    };
+    tryBg();
+
     // Fetch agents
-    fetch("/api/agents")
-      .then((r) => r.json())
-      .then((data) => {
+    const fetchAgents = async () => {
+      try {
+        const r = await fetch("/api/agents");
+        const data = await r.json();
         const list: Agent[] = data.agents ?? [];
         setAgents(list);
-        list.slice(0, 4).forEach((agent, i) => {
-          rendererRef.current?.setAgent(i, agent);
-        });
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+        rendererRef.current?.setAgents(list);
+      } catch {}
+      setLoading(false);
+    };
+    fetchAgents();
 
-    // Poll every 8s
-    const interval = setInterval(() => {
-      fetch("/api/agents")
-        .then((r) => r.json())
-        .then((data) => {
-          const list: Agent[] = data.agents ?? [];
-          setAgents(list);
-          list.slice(0, 4).forEach((agent, i) => {
-            rendererRef.current?.setAgent(i, agent);
-          });
-        })
-        .catch(() => {});
+    const interval = setInterval(async () => {
+      try {
+        const r = await fetch("/api/agents");
+        const data = await r.json();
+        const list: Agent[] = data.agents ?? [];
+        setAgents(list);
+        rendererRef.current?.setAgents(list);
+      } catch {}
     }, 8000);
 
     return () => {
@@ -317,33 +303,31 @@ export default function ValleyPage() {
     };
   }, []);
 
-  const dotColor = (status: string) =>
-    ({ online: "#00ff88", busy: "#ff6b6b", idle: "#ffd93d", offline: "#555555" }[status] ?? "#555");
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px" }}>
         <div>
           <h1 style={{ fontFamily: "var(--font-heading)", fontSize: "22px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "2px" }}>
-            🗺️ Agent Valley
+            🦞 Pixel Office
           </h1>
           <p style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-            {agents.length} agent{agents.length !== 1 ? "s" : ""} · office area · {SCALE.toFixed(2)}× scale
+            {agents.length} agent{agents.length !== 1 ? "s" : ""} · {bgUrl ? "room-bg" : "scene"} · Canvas 2D
           </p>
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          <div style={{
-            padding: "5px 12px", borderRadius: "var(--radius-md)",
-            background: "var(--surface)", border: "1px solid var(--border)",
-            fontSize: "11px", color: "var(--text-muted)", fontFamily: "monospace"
-          }}>
-            Map: 5504×3072 · View: {VIEW_W}×{VIEW_H}
+          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+            {Object.entries(STATUS_COLORS).map(([s, c]) => (
+              <div key={s} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: c }} />
+                <span style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "monospace" }}>{STATUS_LABELS[s]}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Valley Canvas */}
+      {/* Office Canvas */}
       <div style={{
         borderRadius: "var(--radius-lg)",
         overflow: "hidden",
@@ -351,7 +335,7 @@ export default function ValleyPage() {
         position: "relative",
         background: "#0a0a14",
       }}>
-        <canvas ref={canvasRef} style={{ display: "block", width: "100%" }} />
+        <canvas ref={canvasRef} />
         {loading && (
           <div style={{
             position: "absolute", inset: 0,
@@ -359,47 +343,81 @@ export default function ValleyPage() {
             color: "rgba(255,255,255,0.5)", fontFamily: "monospace", fontSize: "13px",
             background: "rgba(10,10,20,0.8)",
           }}>
-            Loading valley...
+            Loading office...
           </div>
         )}
       </div>
 
-      {/* Agent Grid */}
+      {/* Agent Slots Legend */}
+      <div className="card" style={{ padding: "12px 16px" }}>
+        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "10px", fontFamily: "monospace" }}>
+          AGENT SLOTS · {agents.length}/3 occupied
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "8px" }}>
+          {OFFICE_SLOTS.map((slot, i) => {
+            const agent = agents.find(a => {
+              const si = slotForStatus(a.status, 0);
+              return si === i;
+            });
+            const color = agent ? STATUS_COLORS[agent.status] : "#333";
+            return (
+              <div key={slot.id} style={{
+                display: "flex", alignItems: "center", gap: "10px",
+                padding: "10px 14px", borderRadius: "var(--radius-md)",
+                background: "var(--surface)", border: `1px solid ${agent ? color + "66" : "var(--border)"}`,
+              }}>
+                <div style={{
+                  width: "32px", height: "32px", borderRadius: "50%",
+                  background: color + "33",
+                  border: `2px solid ${color}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "16px",
+                }}>
+                  🦞
+                </div>
+                <div>
+                  <div style={{ fontFamily: "monospace", fontSize: "12px", fontWeight: 600, color: "var(--text-primary)" }}>
+                    {slot.label}
+                  </div>
+                  <div style={{ fontFamily: "monospace", fontSize: "11px", color: agent ? color : "var(--text-muted)" }}>
+                    {agent ? `${agent.name} · ${STATUS_LABELS[agent.status]}` : "空"}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* All Agents */}
       {agents.length > 0 && (
         <div className="card" style={{ padding: "12px 16px" }}>
-          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "10px", fontFamily: "monospace" }}>
-            AGENTS · {agents.length} total
+          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "8px", fontFamily: "monospace" }}>
+            ALL AGENTS · {agents.length}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "8px" }}>
-            {agents.slice(0, 8).map((agent) => (
-              <div key={agent.id} style={{
-                display: "flex", alignItems: "center", gap: "8px",
-                padding: "8px 12px", borderRadius: "var(--radius-md)",
-                background: "var(--surface)", border: "1px solid var(--border)",
-                transition: "border-color 0.2s",
-              }}>
-                <span style={{
-                  width: "8px", height: "8px", borderRadius: "50%",
-                  background: dotColor(agent.status), flexShrink: 0,
-                  boxShadow: `0 0 6px ${dotColor(agent.status)}`,
-                }} />
-                <span style={{ fontFamily: "monospace", fontSize: "12px", color: "var(--text-primary)", fontWeight: 600 }}>
-                  {agent.emoji ? `${agent.emoji} ` : ""}{agent.name}
-                </span>
-                <span style={{ marginLeft: "auto", fontSize: "10px", color: "var(--text-muted)", fontFamily: "monospace" }}>
-                  {agent.status}
-                </span>
-              </div>
-            ))}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            {agents.map((agent) => {
+              const color = STATUS_COLORS[agent.status];
+              return (
+                <div key={agent.id} style={{
+                  display: "flex", alignItems: "center", gap: "6px",
+                  padding: "6px 12px", borderRadius: "999px",
+                  background: "var(--surface)", border: `1px solid ${color}44`,
+                }}>
+                  <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: color }} />
+                  <span style={{ fontFamily: "monospace", fontSize: "12px", color: "var(--text-primary)" }}>
+                    {agent.emoji ? `${agent.emoji} ` : ""}{agent.name}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Status */}
       <div style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "monospace", display: "flex", gap: "16px" }}>
-        <span>🎨 Map1 (5504×3072)</span>
-        <span>🧍 Adam sprite</span>
-        <span>📍 4 office slots</span>
+        <span>🦞 char-lobster (188×150)</span>
+        <span>🛋 sofa · 💻 desk · 🛏 bed</span>
         <span>🔄 8s polling</span>
       </div>
     </div>

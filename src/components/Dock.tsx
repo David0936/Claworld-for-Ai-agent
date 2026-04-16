@@ -34,7 +34,7 @@ import { ChatButton } from "@/components/ChatButton";
 const NAV_ITEMS = [
   { href: "/", labelKey: "首页", labelKeyEn: "Dashboard", icon: LayoutDashboard },
   { href: "/office", labelKey: "办公室", labelKeyEn: "Office", icon: LayoutGrid },
-  { href: "/valley", labelKey: "像素山谷", labelKeyEn: "Valley", icon: Map },
+  { href: "/valley", labelKey: "像素办公室", labelKeyEn: "Pixel Office", icon: Map },
   { href: "/library", labelKey: "资产库", labelKeyEn: "Library", icon: Package },
   { href: "/shop", labelKey: "商城", labelKeyEn: "Shop", icon: ShoppingBag },
   { href: "/tenants", labelKey: "房客", labelKeyEn: "Tenants", icon: Users },
